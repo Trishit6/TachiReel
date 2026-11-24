@@ -1,17 +1,19 @@
 {
   "expo": {
-    "name": "Reel-app",
-    "slug": "Reel-app",
+    "name": "TachiReel",
+    "slug": "tachireel",
     "version": "1.0.0",
+    "description": "TachiReel is a gentle photo and short-video social app.",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#F5F1E9",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#F8F0E6",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -19,7 +21,29 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "TachiReel",
+      "shortName": "TachiReel",
+      "lang": "en",
+      "description": "TachiReel is a gentle photo and short-video social app.",
+      "themeColor": "#F5F1E9",
+      "backgroundColor": "#F5F1E9",
+      "splash": {
+        "backgroundColor": "#F5F1E9",
+        "image": "./assets/splash-icon.png",
+        "resizeMode": "contain"
+      }
+    },
+    "scheme": "looply",
+    "plugins": [
+      "expo-router",
+      "expo-image",
+      "expo-video",
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
     }
   }
 }

@@ -1,0 +1,299 @@
+/**
+ * TachiReel — Warm Editorial theme provider.
+ *
+ * A single provider owns the selected preference and the resolved palette.
+ * Every `useTheme()` call reads the same context, so switching appearance in
+ * the navbar updates every route, modal and toast immediately.
+ */
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
+import { useColorScheme } from 'react-native';
+import { readPreferenceSync } from '../lib/storage';
+import { dark, light, handwritten } from './colors';
+
+// ============================
+// TYPOGRAPHY SYSTEM
+// ============================
+
+const fontFamily = {
+  regular: 'PlusJakartaSans_400Regular',
+  medium: 'PlusJakartaSans_500Medium',
+  semiBold: 'PlusJakartaSans_600SemiBold',
+  bold: 'PlusJakartaSans_700Bold',
+  extraBold: 'PlusJakartaSans_800ExtraBold',
+} as const;
+
+const typography = {
+  h1: {
+    fontFamily: fontFamily.bold,
+    fontSize: 32,
+    lineHeight: 40,
+    letterSpacing: -0.5,
+    fontWeight: 700,
+  },
+  h2: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 24,
+    lineHeight: 32,
+    letterSpacing: -0.4,
+    fontWeight: 600,
+  },
+  h3: {
+    fontFamily: fontFamily.medium,
+    fontSize: 19,
+    lineHeight: 27,
+    letterSpacing: -0.25,
+    fontWeight: 600,
+  },
+  body: {
+    fontFamily: fontFamily.regular,
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: 0.15,
+    fontWeight: 400,
+  },
+  bodySmall: {
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0.1,
+    fontWeight: 400,
+  },
+  caption: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.3,
+    fontWeight: 400,
+  },
+  overline: {
+    fontFamily: fontFamily.medium,
+    fontSize: 10,
+    lineHeight: 14,
+    letterSpacing: 1.2,
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+  },
+  tiny: {
+    fontFamily: fontFamily.medium,
+    fontSize: 10,
+    lineHeight: 13,
+    letterSpacing: 0.5,
+    fontWeight: 500,
+  },
+  small: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.1,
+    fontWeight: 500,
+  },
+  smallMedium: {
+    fontFamily: fontFamily.medium,
+    fontSize: 14,
+    lineHeight: 18,
+    letterSpacing: 0.1,
+    fontWeight: 500,
+  },
+  bodyMedium: {
+    fontFamily: fontFamily.medium,
+    fontSize: 14,
+    lineHeight: 20,
+    letterSpacing: 0.1,
+    fontWeight: 500,
+  },
+  buttonLarge: {
+    fontFamily: fontFamily.medium,
+    fontSize: 16,
+    lineHeight: 20,
+    letterSpacing: 0.3,
+    fontWeight: 600,
+  },
+  buttonMedium: {
+    fontFamily: fontFamily.medium,
+    fontSize: 14,
+    lineHeight: 18,
+    letterSpacing: 0.3,
+    fontWeight: 600,
+  },
+  buttonSmall: {
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.3,
+    fontWeight: 600,
+  },
+  button: {
+    fontFamily: fontFamily.medium,
+    fontSize: 14,
+    lineHeight: 18,
+    letterSpacing: 0.3,
+    fontWeight: 600,
+  },
+  display: {
+    fontFamily: fontFamily.bold,
+    fontSize: 32,
+    lineHeight: 40,
+    letterSpacing: -0.6,
+    fontWeight: 700,
+  },
+  displaySm: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 22,
+    lineHeight: 30,
+    letterSpacing: -0.35,
+    fontWeight: 600,
+  },
+} as const;
+
+// ============================
+// THEME PERSISTENCE
+// ============================
+
+const THEME_KEY = 'tachireel.theme';
+
+export type ThemeMode = 'light' | 'dark' | 'system';
+
+function readSavedMode(): ThemeMode {
+  const saved = readPreferenceSync(THEME_KEY);
+  if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+  return 'system';
+}
+
+function systemPrefersDark(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  try {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  } catch {
+    return false;
+  }
+}
+
+function systemPrefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
+
+// ============================
+// CONTEXT
+// ============================
+
+type ThemeValue = {
+  theme: ThemeMode;
+  mode: ThemeMode;
+  resolved: 'light' | 'dark';
+  colors: any;
+  type: typeof typography;
+  shadows: any;
+  radii: any;
+  spacing: typeof spacing;
+  reduceMotion: boolean;
+  handwritten: typeof handwritten;
+  toggleTheme: () => void;
+  setMode: (mode: ThemeMode) => void;
+};
+
+const spacing = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48 } as const;
+
+const shadows = {
+  none: {},
+  sm: { shadowColor: '#1B1C19', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1 },
+  md: { shadowColor: '#1B1C19', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 3 },
+  lg: { shadowColor: '#1B1C19', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 24, elevation: 6 },
+  soft: { shadowColor: '#1B1C19', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
+  floating: { shadowColor: '#1B1C19', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.12, shadowRadius: 28, elevation: 8 },
+  clay: { shadowColor: '#1B1C19', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 9, elevation: 2 },
+  lifted: { shadowColor: '#1B1C19', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.07, shadowRadius: 14, elevation: 4 },
+} as const;
+
+const radii = { xs: 8, sm: 10, md: 14, lg: 20, xl: 28, input: 14, pill: 999, control: 12, card: 18, floating: 20 } as const;
+
+const ThemeContext = createContext<ThemeValue | null>(null);
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const colorScheme = useColorScheme();
+  const [mode, setModeState] = useState<ThemeMode>(readSavedMode);
+  const [reduceMotion, setReduceMotion] = useState(systemPrefersReducedMotion);
+
+  const resolved: 'light' | 'dark' =
+    mode === 'system' ? (colorScheme === 'dark' || (colorScheme == null && systemPrefersDark()) ? 'dark' : 'light') : mode;
+
+  const colors: any = resolved === 'dark' ? dark : light;
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReduceMotion(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    root.classList.toggle('tachireel-dark', resolved === 'dark');
+    root.classList.toggle('tachireel-light', resolved === 'light');
+    root.style.colorScheme = resolved;
+    root.style.backgroundColor = colors.background;
+    document.body.style.backgroundColor = colors.background;
+    document.body.style.color = colors.ink;
+  }, [colors.background, colors.ink, resolved]);
+
+  const setMode = useCallback((nextMode: ThemeMode) => {
+    setModeState(nextMode);
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(THEME_KEY, nextMode);
+    } catch {
+      // The preference simply will not persist if storage is unavailable.
+    }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setMode(resolved === 'dark' ? 'light' : 'dark');
+  }, [resolved, setMode]);
+
+  const value = useMemo<ThemeValue>(
+    () => ({
+      theme: mode,
+      mode,
+      resolved,
+      colors,
+      type: typography,
+      shadows,
+      radii,
+      spacing,
+      reduceMotion,
+      handwritten,
+      toggleTheme,
+      setMode,
+    }),
+    [colors, mode, reduceMotion, resolved, setMode, toggleTheme],
+  );
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+export function useTheme(): ThemeValue {
+  const context = useContext(ThemeContext);
+  if (!context) throw new Error('useTheme must be used inside ThemeProvider');
+  return context;
+}
+
+export const getTypography = (key: keyof typeof typography) => typography[key];
+
+export { dark, light };
+export default ThemeProvider;

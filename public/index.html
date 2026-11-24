@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>%WEB_TITLE%</title>
+    <meta name="application-name" content="TachiReel" />
+    <meta name="apple-mobile-web-app-title" content="TachiReel" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#F5F1E9" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="TachiReel" />
+    <meta property="og:description" content="TachiReel is a gentle photo and short-video social app." />
+    <link rel="manifest" href="/manifest.json" />
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Use static rendering with Expo Router to support running without JavaScript. -->
+    <noscript> You need to enable JavaScript to run this app. </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+    <!-- Ignore expected browser media interruptions before Expo's web error handler sees them. -->
+    <script>
+      (function () {
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = event.reason;
+          if (
+            reason &&
+            reason.name === 'AbortError' &&
+            /play\(\) request was interrupted|media was removed|paused to save power/i.test(String(reason.message || ''))
+          ) {
+            event.preventDefault();
+            if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+          }
+        });
+      })();
+    </script>
+    <!-- Apply the saved theme before first paint so there is no flash of the wrong palette. -->
+    <script>
+      (function () {
+        try {
+          var themeKey = 'tachireel.theme';
+          var saved = window.localStorage.getItem(themeKey);
+          if (saved === null) {
+            var suffix = '.theme';
+            for (var i = 0; i < window.localStorage.length; i += 1) {
+              var legacyKey = window.localStorage.key(i);
+              if (!legacyKey || legacyKey === themeKey || legacyKey.slice(-suffix.length) !== suffix) continue;
+              var prefix = legacyKey.slice(0, -suffix.length);
+              if (!prefix || prefix.indexOf('.') !== -1) continue;
+              var legacyValue = window.localStorage.getItem(legacyKey);
+              if (legacyValue === null) continue;
+              window.localStorage.setItem(themeKey, legacyValue);
+              window.localStorage.removeItem(legacyKey);
+              saved = legacyValue;
+              break;
+            }
+          }
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var dark = saved === 'dark' || ((saved === 'system' || !saved) && prefersDark);
+          var root = document.documentElement;
+          root.classList.toggle('tachireel-dark', dark);
+          root.classList.toggle('tachireel-light', !dark);
+          root.style.colorScheme = dark ? 'dark' : 'light';
+          root.style.backgroundColor = dark ? '#20221F' : '#F5F1E9';
+          document.body.style.backgroundColor = root.style.backgroundColor;
+          document.body.style.color = dark ? '#F5F1E9' : '#292B28';
+        } catch (error) {
+          /* Local storage or matchMedia can be unavailable; the provider handles that. */
+        }
+      })();
+    </script>
+  </body>
+</html>
