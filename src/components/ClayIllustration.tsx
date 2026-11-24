@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { useTheme } from '../theme/theme';
 
 // A stacked, soft-clay heart built from rounded surfaces so it needs no image asset.

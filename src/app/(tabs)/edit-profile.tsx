@@ -1,8 +1,10 @@
+import { privatePageMetadata } from '../../lib/seo';
 import { useState } from 'react';
 import { Platform, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
+import { SemanticHeading } from '../../components/SemanticHeading';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Avatar, ClayButton, ClayCard, ClayInput, EmptyState, Notice, PageHeader, PressableScale } from '../../components/ui';
@@ -30,6 +32,7 @@ export default function EditProfileScreen() {
   if (!profile) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <SemanticHeading visuallyHidden>Edit profile</SemanticHeading>
         <ClayCard style={{ width: '100%', maxWidth: 520, padding: 10 }}>
           <EmptyState
             icon="user"
@@ -128,7 +131,7 @@ export default function EditProfileScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 96, gap: 18 }}
+      contentContainerStyle={{ width: '100%', maxWidth: 980, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 80, gap: 18 }}
       showsVerticalScrollIndicator={false}
     >
       <PageHeader
@@ -242,4 +245,12 @@ export default function EditProfileScreen() {
       </View>
     </ScrollView>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Edit profile",
+    description: "Update your TachiReel display name, handle and bio.",
+    path: "/edit-profile",
+  });
 }

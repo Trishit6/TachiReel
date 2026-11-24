@@ -1,7 +1,8 @@
+import { publicPageMetadata } from '../../lib/seo';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { Link, router } from 'expo-router';
+import Feather from '@expo/vector-icons/Feather';
 import {
   Badge,
   ClayButton,
@@ -17,7 +18,7 @@ import { formatRelativeTime } from '../../lib/format';
 import { isDemoMode } from '../../lib/demo-data';
 import { useSession } from '../../lib/session';
 import { fetchSupportStats, fetchSupportTickets, type SupportStats, type SupportStatus, type SupportTicket } from '../../lib/support';
-import { SUPPORT_ARTICLES, SUPPORT_FAQS, searchSupportArticles } from '../../lib/support-content';
+import { allSupportArticles, allSupportFaqs, loadPublishedHelpContent, searchSupportArticles } from '../../lib/support-content';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../theme/theme';
 
@@ -40,10 +41,15 @@ export default function SupportScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<string | null>(null);
+  const [helpReady, setHelpReady] = useState(false);
   const loadedForRef = useRef<string | null>(null);
 
   const canUseBackend = !isDemoMode && Boolean(supabase && userId);
-  const results = useMemo(() => (query.trim() ? searchSupportArticles(query) : []), [query]);
+  const results = useMemo(() => {
+    // helpReady intentionally invalidates results once published content loads.
+    void helpReady;
+    return query.trim() ? searchSupportArticles(query) : [];
+  }, [helpReady, query]);
 
   // Tickets are loaded once per signed-in user. Preview mode never fakes them.
   useEffect(() => {
@@ -62,6 +68,13 @@ export default function SupportScreen() {
     })();
   }, [canUseBackend, userId]);
 
+  // Published admin content is anonymous-safe and optional: the migration may
+  // not be applied yet, so static guides remain the fallback.
+  useEffect(() => {
+    if (!supabase || helpReady) return;
+    void loadPublishedHelpContent(supabase).finally(() => setHelpReady(true));
+  }, [helpReady]);
+
   const statItems: { label: string; value: number; icon: IconName; color: string }[] = [
     { label: 'Open', value: stats.open, icon: 'mail', color: colors.peach },
     { label: 'Pending', value: stats.pending, icon: 'clock', color: colors.accent },
@@ -72,7 +85,7 @@ export default function SupportScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ width: '100%', maxWidth: 1180, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 100, gap: 18 }}
+      contentContainerStyle={{ width: '100%', maxWidth: 1180, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 80, gap: 18 }}
       showsVerticalScrollIndicator={false}
     >
       <PageHeader
@@ -104,22 +117,26 @@ export default function SupportScreen() {
               {results.length === 0 ? 'No matching articles. Try a different word or open a ticket.' : `${results.length} ${results.length === 1 ? 'article' : 'articles'} found`}
             </Text>
             {results.map(({ article }) => (
-              <Pressable
+              <Link
                 key={article.slug}
-                onPress={() => router.push({ pathname: '/(tabs)/support/articles/[slug]', params: { slug: article.slug } })}
-                accessibilityLabel={`Open article: ${article.title}`}
-                accessibilityRole="button"
-                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 12, backgroundColor: pressed ? colors.backgroundAlt : 'transparent' })}
+                href={{ pathname: '/(tabs)/support/articles/[slug]', params: { slug: article.slug } }}
+                asChild
               >
-                <View style={{ width: 32, height: 32, borderRadius: 11, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
-                  <Feather name="book-open" size={15} color={colors.accent} />
-                </View>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text numberOfLines={1} style={[type.smallMedium, { color: colors.ink }]}>{article.title}</Text>
-                  <Text numberOfLines={1} style={[type.tiny, { color: colors.muted, fontSize: 9 }]}>{article.category} · {article.minutes} min read</Text>
-                </View>
-                <Feather name="chevron-right" size={15} color={colors.mutedLight} />
-              </Pressable>
+                <Pressable
+                  accessibilityLabel={`Open article: ${article.title}`}
+                  accessibilityRole="button"
+                  style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 12, backgroundColor: pressed ? colors.backgroundAlt : 'transparent' })}
+                >
+                  <View style={{ width: 32, height: 32, borderRadius: 11, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+                    <Feather name="book-open" size={15} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text numberOfLines={1} style={[type.smallMedium, { color: colors.ink }]}>{article.title}</Text>
+                    <Text numberOfLines={1} style={[type.tiny, { color: colors.muted, fontSize: 9 }]}>{article.category} · {article.minutes} min read</Text>
+                  </View>
+                  <Feather name="chevron-right" size={15} color={colors.mutedLight} />
+                </Pressable>
+              </Link>
             ))}
           </View>
         ) : null}
@@ -140,14 +157,14 @@ export default function SupportScreen() {
       <View style={{ flexDirection: twoColumn ? 'row' : 'column', alignItems: 'flex-start', gap: 18 }}>
         <View style={{ flex: 1, width: twoColumn ? undefined : '100%', gap: 18, minWidth: 0 }}>
           <SupportSection title="Popular guides" subtitle="Short answers written for this build of TachiReel">
-            {SUPPORT_ARTICLES.slice(0, 5).map((article) => (
+            {allSupportArticles().slice(0, 5).map((article) => (
               <SupportRow
                 key={article.slug}
                 icon="book-open"
                 title={article.title}
                 description={article.summary}
                 meta={`${article.category} · ${article.minutes} min`}
-                onPress={() => router.push({ pathname: '/(tabs)/support/articles/[slug]', params: { slug: article.slug } })}
+                href={{ pathname: '/(tabs)/support/articles/[slug]', params: { slug: article.slug } }}
               />
             ))}
           </SupportSection>
@@ -192,7 +209,7 @@ export default function SupportScreen() {
 
         <View style={{ flex: 1, width: twoColumn ? undefined : '100%', gap: 18, minWidth: 0 }}>
           <SupportSection title="Frequently asked" subtitle="Tap a question to see the short answer.">
-            {SUPPORT_FAQS.map((faq) => {
+            {allSupportFaqs().map((faq) => {
               const open = openFaq === faq.question;
               return (
                 <View key={faq.question} style={{ borderBottomWidth: 1, borderBottomColor: colors.line }}>
@@ -208,13 +225,14 @@ export default function SupportScreen() {
                   {open ? (
                     <View style={{ paddingBottom: 12, gap: 8 }}>
                       <Text style={[type.small, { color: colors.inkSoft, lineHeight: 19 }]}>{faq.answer}</Text>
-                      <ClayButton
-                        label="Read the full guide"
-                        size="sm"
-                        variant="ghost"
-                        icon="arrow-right"
-                        onPress={() => router.push({ pathname: '/(tabs)/support/articles/[slug]', params: { slug: faq.articleSlug } })}
-                      />
+                      <Link href={{ pathname: '/(tabs)/support/articles/[slug]', params: { slug: faq.articleSlug } }} asChild>
+                        <ClayButton
+                          label="Read the full guide"
+                          size="sm"
+                          variant="ghost"
+                          icon="arrow-right"
+                        />
+                      </Link>
                     </View>
                   ) : null}
                 </View>
@@ -251,24 +269,33 @@ function SupportSection({ title, subtitle, children }: { title: string; subtitle
   );
 }
 
-function SupportRow({ icon, title, description, meta, onPress }: { icon: IconName; title: string; description: string; meta?: string; onPress: () => void }) {
+function SupportRow({ icon, title, description, meta, href }: { icon: IconName; title: string; description: string; meta?: string; href: { pathname: '/(tabs)/support/articles/[slug]'; params: { slug: string } } }) {
   const { colors, type } = useTheme();
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityLabel={`Open guide: ${title}`}
-      accessibilityRole="button"
-      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'flex-start', gap: 11, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.line, opacity: pressed ? 0.8 : 1 })}
-    >
-      <View style={{ width: 34, height: 34, borderRadius: 12, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
-        <Feather name={icon} size={16} color={colors.accent} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-        <Text numberOfLines={1} style={[type.smallMedium, { color: colors.ink }]}>{title}</Text>
-        <Text numberOfLines={2} style={[type.small, { color: colors.muted, fontSize: 11, lineHeight: 16 }]}>{description}</Text>
-        {meta ? <Text style={[type.tiny, { color: colors.mutedLight, fontSize: 9 }]}>{meta}</Text> : null}
-      </View>
-      <Feather name="chevron-right" size={16} color={colors.mutedLight} style={{ marginTop: 8 }} />
-    </Pressable>
+    <Link href={href} asChild>
+      <Pressable
+        accessibilityLabel={`Open guide: ${title}`}
+        accessibilityRole="button"
+        style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'flex-start', gap: 11, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.line, opacity: pressed ? 0.8 : 1 })}
+      >
+        <View style={{ width: 34, height: 34, borderRadius: 12, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+          <Feather name={icon} size={16} color={colors.accent} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+          <Text numberOfLines={1} style={[type.smallMedium, { color: colors.ink }]}>{title}</Text>
+          <Text numberOfLines={2} style={[type.small, { color: colors.muted, fontSize: 11, lineHeight: 16 }]}>{description}</Text>
+          {meta ? <Text style={[type.tiny, { color: colors.mutedLight, fontSize: 9 }]}>{meta}</Text> : null}
+        </View>
+        <Feather name="chevron-right" size={16} color={colors.mutedLight} style={{ marginTop: 8 }} />
+      </Pressable>
+    </Link>
   );
+}
+
+export function generateMetadata() {
+  return publicPageMetadata({
+    title: "Help & Support",
+    description: "Find TachiReel help articles, contact support and read answers about safety, privacy, posts and Reelyx.",
+    path: "/support",
+  });
 }

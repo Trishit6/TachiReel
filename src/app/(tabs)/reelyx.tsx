@@ -1,3 +1,4 @@
+import { privatePageMetadata } from '../../lib/seo';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
@@ -12,7 +13,7 @@ import {
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useVideoPlayer, VideoView } from 'expo-video';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Avatar,
@@ -26,6 +27,7 @@ import {
   type IconName,
 } from '../../components/ui';
 import { ReelyxCommentsSheet } from '../../components/ReelyxCommentsSheet';
+import { SemanticHeading } from '../../components/SemanticHeading';
 import { DEMO_REELS, isDemoMode } from '../../lib/demo-data';
 import {
   fetchReelyxCreatorStats,
@@ -47,7 +49,7 @@ import { useSession } from '../../lib/session';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../theme/theme';
 
-const NAV_COOLDOWN = 420;
+const NAV_COOLDOWN = 220;
 
 function formatFollowers(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return 'New creator';
@@ -56,7 +58,7 @@ function formatFollowers(value: number): string {
 }
 
 export default function ReelyxScreen() {
-  const { type, colors, reduceMotion } = useTheme();
+  const { type, colors, motion, reduceMotion } = useTheme();
   const { width, height } = useWindowDimensions();
   const { userId } = useSession();
   const params = useLocalSearchParams<{ id?: string }>();
@@ -239,13 +241,13 @@ export default function ReelyxScreen() {
     anim.setValue(0);
     const timing = Animated.timing(anim, {
       toValue: 1,
-      duration: 360,
-      easing: Easing.out(Easing.cubic),
+      duration: motion.duration.page,
+      easing: motion.easing,
       useNativeDriver: Platform.OS !== 'web',
     });
     timing.start();
     return () => timing.stop();
-  }, [anim, currentId, reduceMotion]);
+  }, [anim, currentId, motion, reduceMotion]);
 
   // Preload only the next clip's metadata; never download the whole feed.
   useEffect(() => {
@@ -460,12 +462,18 @@ export default function ReelyxScreen() {
   const stageHeight = compact ? height : Math.min(height - 140, 760);
 
   if (loading && videos.length === 0) {
-    return <View style={{ flex: 1, backgroundColor: colors.background }}><LoadingState label="Finding your Reelyx…" /></View>;
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <SemanticHeading visuallyHidden>Reelyx</SemanticHeading>
+        <LoadingState label="Finding your Reelyx…" />
+      </View>
+    );
   }
 
   if (error && videos.length === 0) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <SemanticHeading visuallyHidden>Reelyx</SemanticHeading>
         <ClayCard style={{ padding: 12, width: '100%', maxWidth: 520 }}>
           <EmptyState icon="alert-circle" tone="peach" title="Reelyx is taking a break." description={error} />
         </ClayCard>
@@ -476,6 +484,7 @@ export default function ReelyxScreen() {
   if (videos.length === 0) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <SemanticHeading visuallyHidden>Reelyx</SemanticHeading>
         <ClayCard style={{ padding: 12, width: '100%', maxWidth: 520 }}>
           <EmptyState
             icon="film"
@@ -515,10 +524,11 @@ export default function ReelyxScreen() {
       } as never}
       {...(compact && Platform.OS !== 'web' ? panResponder.panHandlers : {})}
     >
+      {compact ? <SemanticHeading visuallyHidden>Reelyx</SemanticHeading> : null}
       {compact ? (
         <View style={{ position: 'absolute', top: insets.top + 10, left: 14, right: 14, zIndex: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Pressable
-            onPress={() => router.push('/(tabs)')}
+            onPress={() => router.push('/(tabs)/home')}
             accessibilityLabel="Back to home"
             style={{ width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.mediaOverlay, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' }}
           >
@@ -536,7 +546,7 @@ export default function ReelyxScreen() {
           {introWidth > 0 ? (
             <View style={{ width: introWidth, gap: 14, alignItems: 'flex-start' }}>
               <Badge label="REELYX · short videos" tone="sage" />
-              <Text style={{ fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 42, lineHeight: 48, letterSpacing: -1.8, color: colors.ink }}>Reelyx.</Text>
+              <SemanticHeading style={{ fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 42, lineHeight: 48, letterSpacing: -1.8, color: colors.ink }}>Reelyx.</SemanticHeading>
               <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, lineHeight: 22, color: colors.muted }}>
                 Small stories in motion. Watch a moment, then keep scrolling — or create your own.
               </Text>
@@ -674,7 +684,7 @@ function ReelStage({
   onToggleMute: () => void;
   onDoubleLike: () => void;
 }) {
-  const { colors, reduceMotion } = useTheme();
+  const { colors, motion, reduceMotion } = useTheme();
   const [hearts, setHearts] = useState<FloatingHeart[]>([]);
   const lastTapRef = useRef(0);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -702,9 +712,9 @@ function ReelStage({
     const heart: FloatingHeart = { id: Date.now() + Math.random(), x, y, value: new Animated.Value(0) };
     setHearts((previous) => [...previous, heart]);
     Animated.sequence([
-      Animated.timing(heart.value, { toValue: 0.45, duration: reduceMotion ? 60 : 180, easing: Easing.out(Easing.cubic), useNativeDriver: Platform.OS !== 'web' }),
-      Animated.timing(heart.value, { toValue: 0.78, duration: reduceMotion ? 60 : 180, easing: Easing.out(Easing.back(1.6)), useNativeDriver: Platform.OS !== 'web' }),
-      Animated.timing(heart.value, { toValue: 1, duration: reduceMotion ? 120 : 420, easing: Easing.in(Easing.quad), useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(heart.value, { toValue: 0.45, duration: reduceMotion ? 60 : motion.duration.fast, easing: motion.easing, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(heart.value, { toValue: 0.78, duration: reduceMotion ? 60 : motion.duration.fast, easing: motion.easing, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(heart.value, { toValue: 1, duration: reduceMotion ? 120 : motion.duration.page, easing: Easing.in(Easing.quad), useNativeDriver: Platform.OS !== 'web' }),
     ]).start(() => setHearts((previous) => previous.filter((item) => item.id !== heart.id)));
   };
 
@@ -856,7 +866,7 @@ function ReelActions({
 }
 
 function AnimatedCount({ value, color }: { value: number; color: string }) {
-  const { reduceMotion } = useTheme();
+  const { motion, reduceMotion } = useTheme();
   const [animation] = useState(() => new Animated.Value(value));
   const [display, setDisplay] = useState(value);
 
@@ -867,8 +877,8 @@ function AnimatedCount({ value, color }: { value: number; color: string }) {
     } else {
       Animated.timing(animation, {
         toValue: value,
-        duration: 320,
-        easing: Easing.out(Easing.cubic),
+        duration: motion.duration.standard,
+        easing: motion.easing,
         useNativeDriver: false,
       }).start();
     }
@@ -876,13 +886,13 @@ function AnimatedCount({ value, color }: { value: number; color: string }) {
       animation.stopAnimation();
       animation.removeListener(listenerId);
     };
-  }, [animation, reduceMotion, value]);
+  }, [animation, motion, reduceMotion, value]);
 
   return <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 9, color }}>{display.toLocaleString()}</Text>;
 }
 
 function LikeAction({ liked, count, onPress, onMedia = false }: { liked: boolean; count: number; onPress: () => void; onMedia?: boolean }) {
-  const { colors, reduceMotion } = useTheme();
+  const { colors, motion, reduceMotion } = useTheme();
   const [scale] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
@@ -891,10 +901,10 @@ function LikeAction({ liked, count, onPress, onMedia = false }: { liked: boolean
       return;
     }
     Animated.sequence([
-      Animated.timing(scale, { toValue: 1.35, duration: 130, easing: Easing.out(Easing.quad), useNativeDriver: Platform.OS !== 'web' }),
-      Animated.spring(scale, { toValue: 1, friction: 5, tension: 180, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(scale, { toValue: 1.22, duration: motion.duration.instant, easing: motion.easing, useNativeDriver: Platform.OS !== 'web' }),
+      Animated.timing(scale, { toValue: 1, duration: motion.duration.standard, easing: motion.easing, useNativeDriver: Platform.OS !== 'web' }),
     ]).start();
-  }, [liked, reduceMotion, scale]);
+  }, [liked, motion, reduceMotion, scale]);
 
   return (
     <Pressable onPress={onPress} accessibilityLabel={liked ? 'Unlike Reelyx' : 'Like Reelyx'} style={{ alignItems: 'center', gap: 4 }}>
@@ -981,4 +991,12 @@ function RoundControl({ icon, label, onPress, disabled = false }: { icon: keyof 
       <Feather name={icon} size={17} color={disabled ? colors.disabledText : colors.accent} />
     </Pressable>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Reelyx",
+    description: "Watch and share short videos in the TachiReel Reelyx feed.",
+    path: "/reelyx",
+  });
 }

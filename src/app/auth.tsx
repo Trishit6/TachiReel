@@ -1,3 +1,4 @@
+import { privatePageMetadata } from '../lib/seo';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -9,10 +10,11 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import * as Linking from 'expo-linking';
 import { ClayHeart } from '../components/ClayIllustration';
 import { TachiReelMark, TachiReelWordmark } from '../components/Brand';
+import { SemanticHeading } from '../components/SemanticHeading';
 import { ClayButton, ClayCard, ClayInput, Dialog, IconButton, Notice } from '../components/ui';
 import { DEMO_EMAIL, DEMO_PASSWORD, isDemoCredentials, startDemoSession } from '../lib/demo-session';
 import { isSupabaseConfigured, isTeen as checkIsTeen, supabase } from '../lib/supabase';
@@ -74,7 +76,7 @@ export default function AuthScreen() {
       .maybeSingle();
     if (profileError) throw profileError;
     if (profile?.account_status === 'pending_guardian') router.replace('/guardian-pending');
-    else if (profile?.account_status === 'active') router.replace('/(tabs)');
+    else if (profile?.account_status === 'active') router.replace('/(tabs)/home');
     else throw new Error('Your account is not active. Contact support for help.');
   };
 
@@ -123,7 +125,7 @@ export default function AuthScreen() {
         startDemoSession();
         await writePreference('tachireel.remember', remember ? '1' : '0');
         await refresh();
-        router.replace('/(tabs)');
+        router.replace('/(tabs)/home');
         return;
       }
       setError('Connect a Supabase project in .env to create accounts. The demo login above works without one.');
@@ -211,15 +213,15 @@ export default function AuthScreen() {
 
   const form = (
     <>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <View>
           <Text style={[type.tiny, { color: colors.accent, marginBottom: 6 }]}>{mode === 'signUp' ? 'A fresh start' : 'Good to see you'}</Text>
-          <Text style={[type.h1, { color: colors.ink }]}>{mode === 'signUp' ? 'Create your corner.' : 'Welcome back.'}</Text>
+          <SemanticHeading style={[type.h1, { color: colors.ink }]}>{mode === 'signUp' ? 'Create your corner.' : 'Welcome back.'}</SemanticHeading>
         </View>
         <IconButton icon="help-circle" label="Why we ask for your age" variant="ghost" size={38} onPress={() => setLegal('privacy')} />
       </View>
 
-      <View style={{ flexDirection: 'row', backgroundColor: colors.backgroundAlt, borderRadius: radii.input, padding: 4, marginBottom: 20 }}>
+      <View style={{ flexDirection: 'row', backgroundColor: colors.backgroundAlt, borderRadius: radii.input, padding: 4, marginBottom: 16 }}>
         {(['signIn', 'signUp'] as const).map((item) => {
           const active = mode === item;
           return (
@@ -245,7 +247,7 @@ export default function AuthScreen() {
         })}
       </View>
 
-      <View style={{ gap: 13 }}>
+      <View style={{ gap: 12 }}>
         {mode === 'signUp' ? (
           <>
             <ClayInput label="FULL NAME" value={fullName} onChangeText={setFullName} placeholder="Aanya Sharma" autoComplete="name" />
@@ -318,7 +320,7 @@ export default function AuthScreen() {
       </View>
 
       {mode === 'signIn' ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, flexWrap: 'wrap', gap: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, flexWrap: 'wrap', gap: 10 }}>
           <Pressable onPress={() => setRemember((value) => !value)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} accessibilityRole="checkbox" accessibilityState={{ checked: remember }}>
             <View
               style={{
@@ -342,10 +344,10 @@ export default function AuthScreen() {
         </View>
       ) : null}
 
-      {error ? <View style={{ marginTop: 14 }}><Notice text={error} tone="error" /></View> : null}
-      {success ? <View style={{ marginTop: 14 }}><Notice text={success} tone="success" /></View> : null}
+      {error ? <View style={{ marginTop: 10 }}><Notice text={error} tone="error" /></View> : null}
+      {success ? <View style={{ marginTop: 10 }}><Notice text={success} tone="success" /></View> : null}
 
-      <View style={{ marginTop: 20 }}>
+      <View style={{ marginTop: 16 }}>
         <ClayButton
           label={mode === 'signUp' ? 'Create your account' : 'Log in to TachiReel'}
           size="lg"
@@ -365,11 +367,11 @@ export default function AuthScreen() {
         </View>
       ) : null}
 
-      <Text style={[type.small, { color: colors.mutedLight, fontSize: 10, textAlign: 'center', marginTop: 14, lineHeight: 16 }]}>
+      <Text style={[type.small, { color: colors.mutedLight, fontSize: 10, textAlign: 'center', marginTop: 10, lineHeight: 16 }]}>
         By continuing, you agree to our <Text onPress={() => setLegal('terms')} style={{ color: colors.accent, textDecorationLine: 'underline' }}>Terms of Service</Text> and <Text onPress={() => setLegal('privacy')} style={{ color: colors.accent, textDecorationLine: 'underline' }}>Privacy Policy</Text>.
       </Text>
 
-      <Pressable onPress={() => router.push('/guardian-consent')} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, padding: 4 }}>
+      <Pressable onPress={() => router.push('/guardian-consent')} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8, padding: 4 }}>
         <Feather name="shield" size={12} color={colors.success} />
         <Text style={[type.smallMedium, { color: colors.success, fontSize: 11 }]}>Parent or guardian? Review a request</Text>
       </Pressable>
@@ -383,35 +385,35 @@ export default function AuthScreen() {
         <Text style={[type.smallMedium, { color: colors.muted }]}>Back to log in</Text>
       </Pressable>
       <Text style={[type.tiny, { color: colors.accent, marginBottom: 6 }]}>A way back in</Text>
-      <Text style={[type.h1, { color: colors.ink }]}>Reset your password.</Text>
-      <Text style={[type.body, { color: colors.muted, marginTop: 8, marginBottom: 20 }]}>
+      <SemanticHeading style={[type.h1, { color: colors.ink }]}>Reset your password.</SemanticHeading>
+      <Text style={[type.body, { color: colors.muted, marginTop: 8, marginBottom: 16 }]}>
         Enter the email on your account and we will send a secure link to choose a new password.
       </Text>
       <ClayInput label="EMAIL ADDRESS" value={email} onChangeText={setEmail} placeholder="you@example.com" autoCapitalize="none" keyboardType="email-address" icon="mail" />
-      {error ? <View style={{ marginTop: 14 }}><Notice text={error} tone="error" /></View> : null}
-      {success ? <View style={{ marginTop: 14 }}><Notice text={success} tone="success" /></View> : null}
-      <View style={{ marginTop: 20 }}>
+      {error ? <View style={{ marginTop: 10 }}><Notice text={error} tone="error" /></View> : null}
+      {success ? <View style={{ marginTop: 10 }}><Notice text={success} tone="success" /></View> : null}
+      <View style={{ marginTop: 16 }}>
         <ClayButton label="Send reset link" size="lg" full iconRight="send" loading={busy} onPress={() => void sendReset()} />
       </View>
-      <Text style={[type.small, { color: colors.mutedLight, fontSize: 10, textAlign: 'center', marginTop: 14 }]}>
+      <Text style={[type.small, { color: colors.mutedLight, fontSize: 10, textAlign: 'center', marginTop: 10 }]}>
         For your safety, we do not reveal whether an email is registered.
       </Text>
     </>
   );
 
   const verify = (
-    <View style={{ alignItems: 'center', paddingVertical: 12 }}>
-      <View style={{ width: 78, height: 78, borderRadius: 28, backgroundColor: colors.mintSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 18, borderWidth: 1, borderColor: colors.mint }}>
+    <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+      <View style={{ width: 78, height: 78, borderRadius: 28, backgroundColor: colors.mintSoft, alignItems: 'center', justifyContent: 'center', marginBottom: 14, borderWidth: 1, borderColor: colors.mint }}>
         <Feather name="mail" size={30} color={colors.success} />
       </View>
-      <Text style={[type.h1, { color: colors.ink, textAlign: 'center' }]}>Check your inbox.</Text>
-      <Text style={[type.body, { color: colors.muted, textAlign: 'center', marginTop: 8, marginBottom: 22 }]}>
+      <SemanticHeading style={[type.h1, { color: colors.ink, textAlign: 'center' }]}>Check your inbox.</SemanticHeading>
+      <Text style={[type.body, { color: colors.muted, textAlign: 'center', marginTop: 8, marginBottom: 16 }]}>
         We sent a verification link to {email.trim() || 'your email'}. Confirm it, then come back and log in.
       </Text>
       {error ? <View style={{ alignSelf: 'stretch', marginBottom: 12 }}><Notice text={error} tone="error" /></View> : null}
       {success ? <View style={{ alignSelf: 'stretch', marginBottom: 12 }}><Notice text={success} tone="success" /></View> : null}
       <ClayButton label="Resend verification email" variant="secondary" full loading={busy} onPress={() => void resendVerification()} />
-      <View style={{ height: 10 }} />
+      <View style={{ height: 8 }} />
       <ClayButton label="Back to log in" variant="ghost" full onPress={() => { setView('form'); setMode('signIn'); setError(null); setSuccess(null); }} />
     </View>
   );
@@ -437,9 +439,9 @@ export default function AuthScreen() {
                 </Pressable>
                 <View style={{ alignItems: 'center' }}>
                   <ClayHeart size={330} />
-                  <Text style={[type.h2, { color: colors.ink, textAlign: 'center', marginTop: 10, maxWidth: 340 }]}>
+                  <SemanticHeading level={2} style={[type.h2, { color: colors.ink, textAlign: 'center', marginTop: 10, maxWidth: 340 }]}>
                     A softer place to be online.
-                  </Text>
+                  </SemanticHeading>
                   <Text style={[type.body, { color: colors.inkSoft, textAlign: 'center', marginTop: 8, maxWidth: 330 }]}>
                     Capture the little things, share them with your circle, and keep the noise out.
                   </Text>
@@ -461,8 +463,8 @@ export default function AuthScreen() {
               </View>
             ) : null}
 
-            <View style={{ flex: 1, paddingHorizontal: wide ? 56 : 20, paddingVertical: wide ? 40 : 18 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: wide ? 36 : 18 }}>
+            <View style={{ flex: 1, paddingHorizontal: wide ? 48 : 20, paddingVertical: wide ? 32 : 18 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: wide ? 24 : 18 }}>
                 {!wide ? (
                   <Pressable onPress={() => router.replace('/')} style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
                     <TachiReelMark size={34} />
@@ -488,7 +490,7 @@ export default function AuthScreen() {
                   {view === 'form' ? form : view === 'forgot' ? forgot : verify}
                 </ClayCard>
                 {isSupabaseConfigured ? (
-                  <Text style={[type.small, { color: colors.mutedLight, fontSize: 10, textAlign: 'center', marginTop: 14 }]}>
+                  <Text style={[type.small, { color: colors.mutedLight, fontSize: 10, textAlign: 'center', marginTop: 10 }]}>
                     Protected by Supabase Auth · Your data stays yours.
                   </Text>
                 ) : null}
@@ -515,3 +517,10 @@ export default function AuthScreen() {
   );
 }
 
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Sign in or create an account",
+    description: "Sign in to TachiReel or create your corner for photos, short videos and quiet conversations.",
+    path: "/auth",
+  });
+}

@@ -1,3 +1,4 @@
+import { privatePageMetadata } from '../../lib/seo';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
@@ -8,7 +9,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { Avatar, ClayButton, ClayCard, EmptyState, ErrorState, PageHeader, PressableScale, SearchField, SectionHeader, Skeleton } from '../../components/ui';
 import { PostCard } from '../../components/PostCard';
 import { DEMO_PEOPLE, DEMO_POSTS, isDemoMode } from '../../lib/demo-data';
@@ -237,7 +238,7 @@ export default function HomeScreen() {
   };
 
   const feedContent = (
-    <View style={{ flex: 1, minWidth: 0, maxWidth: twoColumn ? 720 : undefined, gap: spacing.lg }}>
+    <View style={{ flex: 1, minWidth: 0, maxWidth: twoColumn ? 720 : undefined, gap: spacing.md }}>
       <PageHeader
         eyebrow={new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
         title={`${greeting}, ${name}.`}
@@ -478,15 +479,23 @@ export default function HomeScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 96 }}
+      contentContainerStyle={{ width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 80 }}
       showsVerticalScrollIndicator={false}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={colors.accent} />}
     >
-      <View style={{ flexDirection: twoColumn ? 'row' : 'column', gap: 24, alignItems: twoColumn ? 'flex-start' : 'stretch' }}>
+      <View style={{ flexDirection: twoColumn ? 'row' : 'column', gap: 16, alignItems: twoColumn ? 'flex-start' : 'stretch' }}>
         {feedContent}
         {twoColumn ? rail : null}
       </View>
-      {!twoColumn ? <View style={{ marginTop: 24 }}>{rail}</View> : null}
+      {!twoColumn ? <View style={{ marginTop: 16 }}>{rail}</View> : null}
     </ScrollView>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Home feed",
+    description: "Your TachiReel home feed.",
+    path: "/home",
+  });
 }

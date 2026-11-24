@@ -1,7 +1,9 @@
+import { privatePageMetadata } from '../../../../lib/seo';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
+import { SemanticHeading } from '../../../../components/SemanticHeading';
 import {
   Avatar,
   Badge,
@@ -97,6 +99,7 @@ export default function SupportTicketDetailScreen() {
   if (!canUseBackend) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <SemanticHeading visuallyHidden>Support ticket</SemanticHeading>
         <ClayCard style={{ width: '100%', maxWidth: 520, padding: 12 }}>
           <EmptyState icon="file-text" title="Tickets need a connected backend." description="Connect Supabase and apply the support schema to open and read private tickets." />
         </ClayCard>
@@ -108,12 +111,18 @@ export default function SupportTicketDetailScreen() {
   }
 
   if (loading) {
-    return <View style={{ flex: 1, backgroundColor: colors.background }}><LoadingState label="Opening your ticket…" /></View>;
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <SemanticHeading visuallyHidden>Support ticket</SemanticHeading>
+        <LoadingState label="Opening your ticket…" />
+      </View>
+    );
   }
 
   if (!detail) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <SemanticHeading visuallyHidden>Support ticket</SemanticHeading>
         <ClayCard style={{ width: '100%', maxWidth: 520, padding: 12 }}>
           <EmptyState icon="alert-circle" title="This ticket is not available." description={error ?? 'It may belong to another account, or the support schema is not set up yet.'} />
         </ClayCard>
@@ -129,7 +138,7 @@ export default function SupportTicketDetailScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ width: '100%', maxWidth: 840, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 100, gap: 18 }}
+      contentContainerStyle={{ width: '100%', maxWidth: 840, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 80, gap: 18 }}
       showsVerticalScrollIndicator={false}
     >
       <PageHeader
@@ -225,4 +234,16 @@ function MessageBubble({ message, isOwn, displayName }: { message: SupportTicket
       </View>
     </View>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Support ticket",
+    description: "View a private TachiReel support ticket.",
+    path: "/support/tickets/[id]",
+  });
+}
+
+export function generateStaticParams() {
+  return [];
 }

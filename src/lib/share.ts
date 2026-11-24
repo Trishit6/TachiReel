@@ -1,21 +1,17 @@
 import { Platform, Share } from 'react-native';
-import * as Linking from 'expo-linking';
+import { SITE_ORIGIN, webUrl } from './site';
 
 export function appBaseUrl(): string {
-  const configured = process.env.EXPO_PUBLIC_APP_URL?.replace(/\/$/, '');
-  if (configured) return configured;
-  if (Platform.OS === 'web' && typeof window !== 'undefined') return window.location.origin;
-  return Linking.createURL('/');
+  // One configured origin for canonical URLs, share links and discovery files.
+  return SITE_ORIGIN;
 }
 
 export function postLink(postId: string): string {
-  const base = appBaseUrl();
-  return `${base}${base.includes('?') ? '&' : '?'}post=${encodeURIComponent(postId)}`;
+  return webUrl(`/post/${encodeURIComponent(postId)}`);
 }
 
 export function profileLink(username: string): string {
-  const base = appBaseUrl();
-  return `${base}${base.includes('?') ? '&' : '?'}profile=${encodeURIComponent(username)}`;
+  return webUrl(`/user/${encodeURIComponent(username)}`);
 }
 
 export async function copyText(text: string): Promise<boolean> {

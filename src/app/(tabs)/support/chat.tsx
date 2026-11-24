@@ -1,7 +1,8 @@
+import { privatePageMetadata } from '../../../lib/seo';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import {
   ClayButton,
   ClayCard,
@@ -25,7 +26,7 @@ import {
   sendSupportChatMessage,
   type SupportChatMessage,
 } from '../../../lib/support';
-import { SUPPORT_FAQS } from '../../../lib/support-content';
+import { allSupportFaqs, loadPublishedHelpContent } from '../../../lib/support-content';
 import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../theme/theme';
 
@@ -43,6 +44,7 @@ export default function SupportChatScreen() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [setupNotice, setSetupNotice] = useState<string | null>(null);
+  const [helpReady, setHelpReady] = useState(!supabase);
   const [listening, setListening] = useState(false);
   const [speechState, setSpeechState] = useState<SpeechState>('idle');
   const [speakingId, setSpeakingId] = useState<string | null>(null);
@@ -73,6 +75,11 @@ export default function SupportChatScreen() {
     });
     return () => playbackRef.current?.stop();
   }, [synthesisSupported]);
+
+  useEffect(() => {
+    if (!supabase || helpReady) return;
+    void loadPublishedHelpContent(supabase).finally(() => setHelpReady(true));
+  }, [helpReady]);
 
   useEffect(() => {
     if (!canUseBackend || !supabase || !userId || loadedRef.current === userId) return;
@@ -180,26 +187,20 @@ export default function SupportChatScreen() {
         />
       </View>
 
-      {!canUseBackend ? (
-        <View style={{ paddingHorizontal: 20 }}>
-          <Notice tone="info" text="Preview mode: live AI replies need Supabase and the tachireel-support-chat Edge Function with a server-side key. The FAQ below is available now." />
-        </View>
-      ) : null}
-      {setupNotice ? (
-        <View style={{ paddingHorizontal: 20 }}>
-          <Notice tone="error" text={setupNotice} />
-        </View>
-      ) : null}
-      {error ? (
-        <View style={{ paddingHorizontal: 20 }}>
-          <Notice tone="error" text={error} />
+      {!canUseBackend || setupNotice || error ? (
+        <View style={{ paddingHorizontal: 20, gap: 8 }}>
+          {!canUseBackend ? (
+            <Notice tone="info" text="Preview mode: live AI replies need Supabase and the tachireel-support-chat Edge Function with a server-side key. The FAQ below is available now." />
+          ) : null}
+          {setupNotice ? <Notice tone="error" text={setupNotice} /> : null}
+          {error ? <Notice tone="error" text={error} /> : null}
         </View>
       ) : null}
 
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
-        contentContainerStyle={{ width: '100%', maxWidth: 820, alignSelf: 'center', paddingHorizontal: 20, paddingVertical: 18, gap: 14 }}
+        contentContainerStyle={{ width: '100%', maxWidth: 820, alignSelf: 'center', paddingHorizontal: 20, paddingVertical: 16, gap: 12 }}
         showsVerticalScrollIndicator={false}
       >
         {messages.length === 0 ? (
@@ -254,7 +255,7 @@ export default function SupportChatScreen() {
 
         <View style={{ gap: 8, marginTop: 10 }}>
           <Text style={[type.tiny, { color: colors.muted }]}>Common questions</Text>
-          {SUPPORT_FAQS.slice(0, 4).map((faq) => (
+          {allSupportFaqs().slice(0, 4).map((faq) => (
             <Pressable
               key={faq.question}
               onPress={() => setComposer(faq.question)}
@@ -311,4 +312,12 @@ export default function SupportChatScreen() {
       </View>
     </View>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Support chat",
+    description: "Chat with TachiReel support about your account.",
+    path: "/support/chat",
+  });
 }

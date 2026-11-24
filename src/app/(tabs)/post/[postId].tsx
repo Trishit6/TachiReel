@@ -1,7 +1,9 @@
+import { privatePageMetadata } from '../../../lib/seo';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
+import { SemanticHeading } from '../../../components/SemanticHeading';
 import { ClayCard, ErrorState, LoadingState, Notice } from '../../../components/ui';
 import { PostCard } from '../../../components/PostCard';
 import { DEMO_POSTS, isDemoMode } from '../../../lib/demo-data';
@@ -146,13 +148,13 @@ export default function PostDetailScreen() {
 
   const goBack = () => {
     if (router.canGoBack()) router.back();
-    else router.push('/(tabs)');
+    else router.push('/(tabs)/home');
   };
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 96, gap: 14 }}
+      contentContainerStyle={{ width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 80, gap: 14 }}
       showsVerticalScrollIndicator={false}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -160,7 +162,7 @@ export default function PostDetailScreen() {
           <Feather name="chevron-left" size={20} color={colors.ink} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={[type.h3, { color: colors.ink }]}>A little moment.</Text>
+          <SemanticHeading style={[type.h3, { color: colors.ink }]}>A little moment.</SemanticHeading>
           <Text style={[type.small, { color: colors.muted, fontSize: 10 }]}>Shared on TachiReel</Text>
         </View>
         <Feather name="bookmark" size={18} color={saved ? colors.accent : colors.muted} />
@@ -193,4 +195,16 @@ export default function PostDetailScreen() {
       </Text>
     </ScrollView>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Post",
+    description: "View a TachiReel post.",
+    path: "/post/[postId]",
+  });
+}
+
+export function generateStaticParams() {
+  return [];
 }

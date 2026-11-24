@@ -1,6 +1,8 @@
+import { privatePageMetadata } from '../../lib/seo';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
+import { SemanticHeading } from '../../components/SemanticHeading';
 import { ClayButton, ClayCard, EmptyState, ErrorState, LoadingState, PageHeader } from '../../components/ui';
 import { ProfileView } from '../../components/ProfileView';
 import { DEMO_POSTS, DEMO_PROFILE, isDemoMode } from '../../lib/demo-data';
@@ -80,12 +82,18 @@ export default function ProfileScreen() {
   }, [load, userId]);
 
   if (sessionLoading) {
-    return <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center' }}><LoadingState label="Opening your space…" /></View>;
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center' }}>
+        <SemanticHeading visuallyHidden>Profile</SemanticHeading>
+        <LoadingState label="Opening your space…" />
+      </View>
+    );
   }
 
   if (!profile) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <SemanticHeading visuallyHidden>Profile</SemanticHeading>
         <ClayCard style={{ width: '100%', maxWidth: 520, padding: 10 }}>
           <EmptyState
             icon="user"
@@ -101,7 +109,7 @@ export default function ProfileScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ width: '100%', maxWidth: 1000, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 96, gap: 18 }}
+      contentContainerStyle={{ width: '100%', maxWidth: 1000, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 80, gap: 18 }}
       showsVerticalScrollIndicator={false}
     >
       <PageHeader
@@ -138,4 +146,12 @@ export default function ProfileScreen() {
       )}
     </ScrollView>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Profile",
+    description: "Your TachiReel profile and moments.",
+    path: "/profile",
+  });
 }

@@ -1,6 +1,8 @@
+import { privatePageMetadata } from '../../../lib/seo';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { SemanticHeading } from '../../../components/SemanticHeading';
 import { ClayButton, ClayCard, ErrorState, LoadingState } from '../../../components/ui';
 import { ProfileView, type ProfilePerson } from '../../../components/ProfileView';
 import { DEMO_CONVERSATIONS, DEMO_PEOPLE, DEMO_POSTS, DEMO_PROFILE, isDemoMode } from '../../../lib/demo-data';
@@ -144,12 +146,18 @@ export default function UserProfileScreen() {
   };
 
   if (loading) {
-    return <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center' }}><LoadingState label="Opening this corner…" /></View>;
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center' }}>
+        <SemanticHeading visuallyHidden>Profile</SemanticHeading>
+        <LoadingState label="Opening this corner…" />
+      </View>
+    );
   }
 
   if (error || !profile) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <SemanticHeading visuallyHidden>Profile</SemanticHeading>
         <ClayCard style={{ width: '100%', maxWidth: 520, padding: 10 }}>
           <ErrorState message={error ?? 'This profile is unavailable.'} onRetry={() => { setLoading(true); setError(null); void load().finally(() => setLoading(false)); }} />
           <View style={{ alignItems: 'center', paddingBottom: 12 }}>
@@ -163,9 +171,10 @@ export default function UserProfileScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ width: '100%', maxWidth: 1000, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 96, gap: 16 }}
+      contentContainerStyle={{ width: '100%', maxWidth: 1000, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 80, gap: 16 }}
       showsVerticalScrollIndicator={false}
     >
+      <SemanticHeading visuallyHidden>{profile.display_name}</SemanticHeading>
       <View style={{ width: '100%' }}>
         <ProfileView
           profile={profile}
@@ -186,4 +195,16 @@ export default function UserProfileScreen() {
       </View>
     </ScrollView>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Profile",
+    description: "View a TachiReel profile.",
+    path: "/user/[username]",
+  });
+}
+
+export function generateStaticParams() {
+  return [];
 }

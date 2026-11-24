@@ -1,7 +1,8 @@
+import { privatePageMetadata } from '../../lib/seo';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { ClayButton, ClayCard, ClayInput, Dialog, Notice, PageHeader, PressableScale } from '../../components/ui';
 import { isDemoMode } from '../../lib/demo-data';
 import { useSession } from '../../lib/session';
@@ -148,7 +149,7 @@ export default function SettingsScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ width: '100%', maxWidth: 1080, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 96, gap: 18 }}
+      contentContainerStyle={{ width: '100%', maxWidth: 1080, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 80, gap: 18 }}
       showsVerticalScrollIndicator={false}
     >
       <PageHeader
@@ -441,4 +442,12 @@ function ToggleRow({
       </View>
     </Pressable>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Settings",
+    description: "Manage your TachiReel appearance, privacy and account settings.",
+    path: "/settings",
+  });
 }

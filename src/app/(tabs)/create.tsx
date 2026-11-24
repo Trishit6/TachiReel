@@ -1,3 +1,4 @@
+import { privatePageMetadata } from '../../lib/seo';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,7 +13,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { ClayButton, ClayCard, ClayInput, Chip, Dialog, Notice, PageHeader, PressableScale } from '../../components/ui';
 import { useSession } from '../../lib/session';
 import { readPreference, writePreference } from '../../lib/storage';
@@ -384,17 +385,17 @@ export default function CreateScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ width: '100%', maxWidth: 1180, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 96 }}
+      contentContainerStyle={{ width: '100%', maxWidth: 1180, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 80, gap: 18 }}
       showsVerticalScrollIndicator={false}
     >
       <PageHeader
         eyebrow="Your little corner of the internet"
         title="Create something."
         subtitle="Good moments are better when shared."
-        actions={<ClayButton label="Back to feed" variant="ghost" size="sm" icon="arrow-left" onPress={() => router.push('/(tabs)')} />}
+        actions={<ClayButton label="Back to feed" variant="ghost" size="sm" icon="arrow-left" onPress={() => router.push('/(tabs)/home')} />}
       />
 
-      <View style={{ flexDirection: wide ? 'row' : 'column', gap: 18, alignItems: 'flex-start', marginTop: 20 }}>
+      <View style={{ flexDirection: wide ? 'row' : 'column', gap: 18, alignItems: 'flex-start' }}>
         <View style={{ width: wide ? '56%' : '100%', maxWidth: wide ? 640 : undefined }}>{mediaPanel}</View>
         <View style={{ width: wide ? undefined : '100%', flex: wide ? 1 : undefined, minWidth: 0 }}>{detailsPanel}</View>
       </View>
@@ -424,4 +425,12 @@ export default function CreateScreen() {
       </Dialog>
     </ScrollView>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Create a post",
+    description: "Share a photo, short video or small thought on TachiReel.",
+    path: "/create",
+  });
 }

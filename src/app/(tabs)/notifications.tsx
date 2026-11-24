@@ -1,7 +1,8 @@
+import { privatePageMetadata } from '../../lib/seo';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { Avatar, Badge, ClayButton, ClayCard, Chip, EmptyState, ErrorState, LoadingState, PageHeader } from '../../components/ui';
 import { DEMO_NOTIFICATIONS, isDemoMode, type DemoNotification } from '../../lib/demo-data';
 import { formatRelativeTime } from '../../lib/format';
@@ -11,13 +12,15 @@ import { readPreference, writePreference } from '../../lib/storage';
 import { supabase } from '../../lib/supabase';
 import { useTheme } from '../../theme/theme';
 
-type Category = 'All' | 'Likes' | 'Comments' | 'Followers' | 'Mentions';
+type Category = 'All' | 'Likes' | 'Comments' | 'Followers' | 'Announcements' | 'Mentions';
 type Notification = {
   id: string;
-  type: 'like' | 'comment' | 'follow';
+  type: 'like' | 'comment' | 'follow' | 'announcement';
   actorName: string;
   actorUsername: string | null;
   actorAvatar: string | null;
+  title: string | null;
+  body: string | null;
   postId: string | null;
   postCaption: string | null;
   postMediaUrl?: string;
@@ -26,10 +29,13 @@ type Notification = {
 };
 
 type Row = {
-  notification_type: 'like' | 'comment' | 'follow';
-  actor_id: string;
-  actor_display_name: string;
-  actor_username: string;
+  notification_id: string;
+  notification_type: 'like' | 'comment' | 'follow' | 'announcement';
+  notification_title: string | null;
+  notification_body: string | null;
+  actor_id: string | null;
+  actor_display_name: string | null;
+  actor_username: string | null;
   actor_avatar_url: string | null;
   post_id: string | null;
   post_caption: string | null;
@@ -37,7 +43,7 @@ type Row = {
   created_at: string;
 };
 
-const CATEGORIES: Category[] = ['All', 'Likes', 'Comments', 'Followers', 'Mentions'];
+const CATEGORIES: Category[] = ['All', 'Likes', 'Comments', 'Followers', 'Announcements', 'Mentions'];
 
 export default function NotificationsScreen() {
   const { colors, type, radii } = useTheme();
@@ -58,6 +64,8 @@ export default function NotificationsScreen() {
         actorName: item.actor.display_name,
         actorUsername: item.actor.username,
         actorAvatar: item.actor.avatar_url,
+        title: null,
+        body: item.post_caption ?? null,
         postId: null,
         postCaption: item.post_caption ?? null,
         createdAt: item.created_at,
@@ -80,11 +88,15 @@ export default function NotificationsScreen() {
     const rows = (data ?? []) as Row[];
     const media = await signPaths(client, rows.map((row) => row.post_media_key));
     setItems(rows.map((row, index) => ({
-      id: `${row.notification_type}-${row.actor_id}-${row.post_id ?? 'follow'}-${index}`,
+      id: row.notification_type === 'announcement'
+        ? `announcement-${row.notification_id}`
+        : `${row.notification_type}-${row.actor_id}-${row.post_id ?? 'follow'}-${index}`,
       type: row.notification_type,
-      actorName: row.actor_display_name,
+      actorName: row.actor_display_name ?? 'TachiReel',
       actorUsername: row.actor_username,
       actorAvatar: row.actor_avatar_url,
+      title: row.notification_title,
+      body: row.notification_body,
       postId: row.post_id,
       postCaption: row.post_caption,
       postMediaUrl: row.post_media_key ? media[row.post_media_key] : undefined,
@@ -130,6 +142,7 @@ export default function NotificationsScreen() {
       Likes: 'like',
       Comments: 'comment',
       Followers: 'follow',
+      Announcements: 'announcement',
     };
     if (category === 'All') return items;
     if (category === 'Mentions') return [];
@@ -141,7 +154,7 @@ export default function NotificationsScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ width: '100%', maxWidth: 880, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 96, gap: 18 }}
+      contentContainerStyle={{ width: '100%', maxWidth: 880, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 80, gap: 18 }}
       showsVerticalScrollIndicator={false}
     >
       <PageHeader
@@ -180,18 +193,20 @@ export default function NotificationsScreen() {
         <View style={{ gap: 9 }}>
           {filtered.map((item) => {
             const unread = isUnread(item);
-            const icon = item.type === 'like' ? 'heart' : item.type === 'comment' ? 'message-circle' : 'user-plus';
-            const tone = item.type === 'like' ? colors.peach : item.type === 'comment' ? colors.accent : colors.success;
-            const toneBg = item.type === 'like' ? colors.peachSoft : item.type === 'comment' ? colors.accentSoft : colors.mintSoft;
+            const announcement = item.type === 'announcement';
+            const icon = announcement ? 'bell' : item.type === 'like' ? 'heart' : item.type === 'comment' ? 'message-circle' : 'user-plus';
+            const tone = announcement ? '#C8341D' : item.type === 'like' ? colors.peach : item.type === 'comment' ? colors.accent : colors.success;
+            const toneBg = announcement ? colors.dangerSoft : item.type === 'like' ? colors.peachSoft : item.type === 'comment' ? colors.accentSoft : colors.mintSoft;
             const text = item.type === 'like' ? 'liked your moment.' : item.type === 'comment' ? 'commented on your moment.' : 'started following you.';
             return (
               <Pressable
                 key={item.id}
                 onPress={() => {
+                  if (announcement) return;
                   if (item.type === 'follow' && item.actorUsername) router.push({ pathname: '/(tabs)/user/[username]', params: { username: item.actorUsername } });
                   else if (item.postId) router.push({ pathname: '/(tabs)/post/[postId]', params: { postId: item.postId } });
                 }}
-                accessibilityLabel={`${item.actorName} ${text}`}
+                accessibilityLabel={announcement ? item.title ?? 'Announcement' : `${item.actorName} ${text}`}
                 style={({ pressed }) => ({
                   backgroundColor: unread ? colors.accentSoft : colors.surface,
                   borderRadius: radii.card,
@@ -201,19 +216,34 @@ export default function NotificationsScreen() {
                   flexDirection: 'row',
                   alignItems: 'center',
                   gap: 11,
-                  opacity: pressed ? 0.9 : 1,
+                  opacity: pressed && !announcement ? 0.9 : 1,
                 })}
               >
                 <View style={{ position: 'relative' }}>
-                  <Avatar uri={item.actorAvatar} name={item.actorName} size={44} />
-                  <View style={{ position: 'absolute', right: -3, bottom: -3, width: 21, height: 21, borderRadius: 8, backgroundColor: toneBg, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: unread ? colors.accentSoft : colors.surface }}>
-                    <Feather name={icon} size={10} color={tone} />
-                  </View>
+                  {announcement ? (
+                    <View style={{ width: 44, height: 44, borderRadius: radii.card, backgroundColor: toneBg, alignItems: 'center', justifyContent: 'center' }}>
+                      <Feather name="bell" size={19} color={tone} />
+                    </View>
+                  ) : (
+                    <>
+                      <Avatar uri={item.actorAvatar} name={item.actorName} size={44} />
+                      <View style={{ position: 'absolute', right: -3, bottom: -3, width: 21, height: 21, borderRadius: 8, backgroundColor: toneBg, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: unread ? colors.accentSoft : colors.surface }}>
+                        <Feather name={icon} size={10} color={tone} />
+                      </View>
+                    </>
+                  )}
                 </View>
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={[type.small, { color: colors.inkSoft, lineHeight: 18 }]}>
-                    <Text style={[type.smallMedium, { color: colors.ink }]}>{item.actorName}</Text> {text}
-                  </Text>
+                  {announcement ? (
+                    <>
+                      <Text style={[type.smallMedium, { color: colors.ink }]} numberOfLines={1}>{item.title ?? 'Announcement'}</Text>
+                      <Text style={[type.small, { color: colors.inkSoft, lineHeight: 18 }]} numberOfLines={3}>{item.body ?? ''}</Text>
+                    </>
+                  ) : (
+                    <Text style={[type.small, { color: colors.inkSoft, lineHeight: 18 }]}>
+                      <Text style={[type.smallMedium, { color: colors.ink }]}>{item.actorName}</Text> {text}
+                    </Text>
+                  )}
                   {item.postCaption ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
                       {item.postMediaUrl ? (
@@ -226,7 +256,7 @@ export default function NotificationsScreen() {
                   ) : null}
                   <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, marginTop: 4 }]}>{formatRelativeTime(item.createdAt)}</Text>
                 </View>
-                {unread ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent }} /> : <Feather name="chevron-right" size={15} color={colors.mutedLight} />}
+                {unread ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent }} /> : announcement ? null : <Feather name="chevron-right" size={15} color={colors.mutedLight} />}
               </Pressable>
             );
           })}
@@ -236,4 +266,12 @@ export default function NotificationsScreen() {
       {isDemo ? <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, textAlign: 'center' }]}>Preview notifications. Connect Supabase for live activity.</Text> : null}
     </ScrollView>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Notifications",
+    description: "Your TachiReel notifications.",
+    path: "/notifications",
+  });
 }

@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View, useWindowDimensions, type ScrollViewInstance } from 'react-native';
-import { router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { publicPageMetadata } from '../lib/seo';
+import { useEffect, useRef } from 'react';
+import { Pressable, ScrollView, Text, View, useWindowDimensions, type ScrollViewInstance } from 'react-native';
+import { Link, router } from 'expo-router';
+import Feather from '@expo/vector-icons/Feather';
 import { ClayHeart } from '../components/ClayIllustration';
 import { TachiReelMark, TachiReelWordmark } from '../components/Brand';
+import { SemanticHeading } from '../components/SemanticHeading';
 import { ClayButton, ClayCard } from '../components/ui';
 import { hasDemoSession } from '../lib/demo-session';
 import { readPreference } from '../lib/storage';
@@ -42,7 +44,6 @@ export default function IndexScreen() {
   const { colors, type, radii } = useTheme();
   const { width } = useWindowDimensions();
   const wide = width >= 960;
-  const [checking, setChecking] = useState(true);
   const scrollRef = useRef<ScrollViewInstance | null>(null);
   const sectionY = useRef<Record<string, number>>({});
 
@@ -51,7 +52,7 @@ export default function IndexScreen() {
     void (async () => {
       try {
         if (hasDemoSession()) {
-          router.replace('/(tabs)');
+          router.replace('/(tabs)/home');
           return;
         }
         if (!supabase) return;
@@ -71,12 +72,12 @@ export default function IndexScreen() {
           .maybeSingle();
         if (!active) return;
         if (profile?.account_status === 'pending_guardian') router.replace('/guardian-pending');
-        else if (profile?.account_status === 'active') router.replace('/(tabs)');
+        else if (profile?.account_status === 'active') router.replace('/(tabs)/home');
         else {
           await supabase.auth.signOut();
         }
-      } finally {
-        if (active) setChecking(false);
+      } catch {
+        // Keep the public landing page available when the session check fails.
       }
     })();
     return () => {
@@ -88,20 +89,12 @@ export default function IndexScreen() {
     scrollRef.current?.scrollTo({ y: sectionY.current[key] ?? 0, animated: true });
   };
 
-  if (checking) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
-        <ActivityIndicator color={colors.accent} />
-      </View>
-    );
-  }
-
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 0 }}>
         <View style={{ width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: wide ? 40 : 20 }}>
           <View style={{ height: wide ? 88 : 72, flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <Pressable onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Pressable accessibilityLabel="Back to top" onPress={() => scrollRef.current?.scrollTo({ y: 0, animated: true })} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <TachiReelMark size={36} />
               <TachiReelWordmark size={24} />
             </Pressable>
@@ -136,7 +129,7 @@ export default function IndexScreen() {
             <ClayButton label={wide ? 'Get started' : 'Join'} size="sm" onPress={() => router.push('/auth')} />
           </View>
 
-          <View style={{ flexDirection: wide ? 'row' : 'column', alignItems: 'center', gap: wide ? 56 : 20, paddingTop: wide ? 54 : 24, paddingBottom: wide ? 84 : 56 }}>
+          <View style={{ flexDirection: wide ? 'row' : 'column', alignItems: 'center', gap: wide ? 48 : 20, paddingTop: wide ? 44 : 24, paddingBottom: wide ? 64 : 48 }}>
             <View style={{ flex: 1, maxWidth: 580 }}>
               <View
                 style={{
@@ -154,12 +147,12 @@ export default function IndexScreen() {
                 <Feather name="star" size={12} color={colors.accent} />
                 <Text style={[type.tiny, { color: colors.accent, fontSize: 9 }]}>Your little corner of the internet</Text>
               </View>
-              <Text style={[wide ? type.display : type.displaySm, { color: colors.ink }]}>Welcome to TachiReel</Text>
+              <SemanticHeading style={[wide ? type.display : type.displaySm, { color: colors.ink }]}>Welcome to TachiReel</SemanticHeading>
               <Text style={[type.h2, { color: colors.accent, marginTop: 10 }]}>Capture. Share. Explore.</Text>
               <Text style={[type.body, { color: colors.muted, fontSize: 16, lineHeight: 26, marginTop: 16, maxWidth: 480 }]}>
                 A gentle social space for the photos, people, and small moments that make your world feel like yours.
               </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 28, flexWrap: 'wrap' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 24, flexWrap: 'wrap' }}>
                 <ClayButton label="Create your corner" size="lg" iconRight="arrow-right" onPress={() => router.push('/auth')} />
                 <ClayButton label="I already have an account" size="lg" variant="secondary" onPress={() => router.push('/auth')} />
               </View>
@@ -184,7 +177,7 @@ export default function IndexScreen() {
 
         <View
           onLayout={(event) => { sectionY.current.discover = event.nativeEvent.layout.y; }}
-          style={{ width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: wide ? 40 : 20, paddingVertical: wide ? 56 : 32 }}
+          style={{ width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: wide ? 40 : 20, paddingVertical: wide ? 48 : 28 }}
         >
           <Text style={[type.tiny, { color: colors.accent, marginBottom: 8 }]}>Made for the everyday</Text>
           <Text style={[wide ? type.h1 : type.h2, { color: colors.ink, maxWidth: 640 }]}>
@@ -193,7 +186,7 @@ export default function IndexScreen() {
           <Text style={[type.body, { color: colors.muted, maxWidth: 540, marginTop: 8 }]}>
             Everything you need to share a little life, without the parts that make you want to put your phone down.
           </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 18, marginTop: 30 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 18, marginTop: 24 }}>
             {FEATURES.map((feature) => (
               <ClayCard key={feature.title} style={{ flexGrow: 1, flexBasis: wide ? 280 : '100%', padding: 24, minHeight: 220 }} radius={28}>
                 <View style={{ width: 58, height: 58, borderRadius: 20, backgroundColor: colors[`${feature.tone}Soft` as 'sageSoft'], alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
@@ -212,7 +205,7 @@ export default function IndexScreen() {
           onLayout={(event) => { sectionY.current.community = event.nativeEvent.layout.y; }}
           style={{ backgroundColor: colors.backgroundAlt, borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.line }}
         >
-          <View style={{ width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: wide ? 40 : 20, paddingVertical: wide ? 64 : 36 }}>
+          <View style={{ width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: wide ? 40 : 20, paddingVertical: wide ? 52 : 32 }}>
             <View style={{ flexDirection: wide ? 'row' : 'column', gap: wide ? 48 : 20, alignItems: wide ? 'center' : 'stretch' }}>
               <View style={{ flex: 1 }}>
                 <Text style={[type.tiny, { color: colors.success, marginBottom: 8 }]}>A community, not an audience</Text>
@@ -251,13 +244,13 @@ export default function IndexScreen() {
 
         <View
           onLayout={(event) => { sectionY.current.safety = event.nativeEvent.layout.y; }}
-          style={{ width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: wide ? 40 : 20, paddingVertical: wide ? 64 : 36 }}
+          style={{ width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: wide ? 40 : 20, paddingVertical: wide ? 52 : 32 }}
         >
           <Text style={[type.tiny, { color: colors.peach, marginBottom: 8 }]}>Thoughtfully built</Text>
           <Text style={[wide ? type.h1 : type.h2, { color: colors.ink, maxWidth: 620 }]}>
             The good parts of social, with the sharp edges softened.
           </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 28 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 24 }}>
             {HIGHLIGHTS.map((item) => (
               <ClayCard key={item.title} style={{ flexGrow: 1, flexBasis: wide ? '46%' : '100%', padding: 20 }} elevated="soft">
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -272,8 +265,8 @@ export default function IndexScreen() {
           </View>
         </View>
 
-        <View style={{ width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: wide ? 40 : 20, paddingBottom: wide ? 72 : 40 }}>
-          <ClayCard style={{ padding: wide ? 44 : 26, alignItems: 'center', backgroundColor: colors.accentSoft }} elevated="floating" radius={32}>
+        <View style={{ width: '100%', maxWidth: 1240, alignSelf: 'center', paddingHorizontal: wide ? 40 : 20, paddingBottom: wide ? 56 : 32 }}>
+          <ClayCard style={{ padding: wide ? 36 : 24, alignItems: 'center', backgroundColor: colors.accentSoft }} elevated="floating" radius={32}>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
               {[colors.mint, colors.peach, colors.butter].map((color, i) => (
                 <View key={i} style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: color }} />
@@ -303,22 +296,44 @@ export default function IndexScreen() {
             <View style={{ flexDirection: 'row', gap: wide ? 56 : 36, flexWrap: 'wrap' }}>
               <View style={{ gap: 7 }}>
                 <Text style={[type.tiny, { color: colors.mutedLight }]}>Product</Text>
-                {['Home feed', 'Reels', 'Explore'].map((label) => (
-                  <Text key={label} style={[type.small, { color: colors.muted }]}>{label}</Text>
+                {([
+                  { label: 'Home feed', href: '/home' },
+                  { label: 'Reels', href: '/reelyx' },
+                  { label: 'Explore', href: '/discover' },
+                ] as const).map((item) => (
+                  <Link key={item.label} href={item.href} asChild>
+                    <Pressable accessibilityLabel={`Open ${item.label}`}>
+                      <Text style={[type.small, { color: colors.muted }]}>{item.label}</Text>
+                    </Pressable>
+                  </Link>
                 ))}
               </View>
               <View style={{ gap: 7 }}>
                 <Text style={[type.tiny, { color: colors.mutedLight }]}>Safety</Text>
-                {['Community guidelines', 'Teen safety', 'Privacy'].map((label) => (
-                  <Text key={label} style={[type.small, { color: colors.muted }]}>{label}</Text>
+                {([
+                  { label: 'Community guidelines', href: '/support/articles/community-guidelines' },
+                  { label: 'Teen safety', href: '/support/articles/teen-safety' },
+                  { label: 'Privacy', href: '/support/articles/privacy' },
+                ] as const).map((item) => (
+                  <Link key={item.label} href={item.href} asChild>
+                    <Pressable accessibilityLabel={`Open ${item.label}`}>
+                      <Text style={[type.small, { color: colors.muted }]}>{item.label}</Text>
+                    </Pressable>
+                  </Link>
                 ))}
               </View>
               <View style={{ gap: 7 }}>
                 <Text style={[type.tiny, { color: colors.mutedLight }]}>Account</Text>
-                {['Log in', 'Get started', 'Guardian review'].map((label) => (
-                  <Pressable key={label} onPress={() => router.push(label === 'Guardian review' ? '/guardian-consent' : '/auth')}>
-                    <Text style={[type.small, { color: colors.muted }]}>{label}</Text>
-                  </Pressable>
+                {([
+                  { label: 'Log in', href: '/auth' },
+                  { label: 'Get started', href: '/auth' },
+                  { label: 'Guardian review', href: '/guardian-consent' },
+                ] as const).map((item) => (
+                  <Link key={item.label} href={item.href} asChild>
+                    <Pressable accessibilityLabel={`Open ${item.label}`}>
+                      <Text style={[type.small, { color: colors.muted }]}>{item.label}</Text>
+                    </Pressable>
+                  </Link>
                 ))}
               </View>
             </View>
@@ -333,3 +348,10 @@ export default function IndexScreen() {
   );
 }
 
+export function generateMetadata() {
+  return publicPageMetadata({
+    title: "Gentle photo & short-video sharing",
+    description: "TachiReel is a gentle photo and short-video social app for sharing everyday moments with a small circle.",
+    path: "/",
+  });
+}

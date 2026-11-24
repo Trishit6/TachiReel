@@ -12,7 +12,6 @@ export function TachiReelMark({ size = 40 }: { size?: number }) {
       height={size}
       viewBox="0 0 512 512"
       fill="none"
-      accessible
       accessibilityLabel="TachiReel symbol"
     >
       <Circle cx="256" cy="256" r="236" fill={brand.reelRed} />
@@ -58,7 +57,7 @@ export function TachiReelLogo({
   const gap = variant === 'compact' ? Math.round(size * 0.16) : Math.round(size * 0.22);
 
   return (
-    <View style={[styles.row, { gap }, style]} accessible accessibilityLabel="TachiReel">
+    <View style={[styles.row, { gap }, style]} accessibilityLabel="TachiReel">
       <TachiReelMark size={markSize} />
       {variant === 'symbol' ? null : <TachiReelWordmark size={wordSize} color={color} />}
     </View>

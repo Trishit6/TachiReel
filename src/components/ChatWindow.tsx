@@ -9,12 +9,13 @@ import {
   View,
   type ScrollViewInstance,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
+import { SemanticHeading } from './SemanticHeading';
 import { Avatar, EmptyState, ErrorState, Notice, PressableScale } from './ui';
 import { activeRecently, fetchMessages, messageDay, messageTime, sendMessage, type Message } from '../lib/messages';
 import { useSession } from '../lib/session';
 import { supabase } from '../lib/supabase';
-import { useTheme } from '../theme/theme';
+import { surfaceTransition, useTheme } from '../theme/theme';
 
 const EMOJIS = ['😊', '🌿', '✨', '💛', '☕', '🌙', '🫶', '🌼'];
 
@@ -55,6 +56,7 @@ export function ChatWindow({
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [composing, setComposing] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -151,7 +153,7 @@ export function ChatWindow({
         ) : null}
         <Avatar uri={peer.avatarUrl} name={peer.name} size={40} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text numberOfLines={1} style={[type.smallMedium, { color: colors.ink }]}>{peer.name}</Text>
+          <SemanticHeading level={2} numberOfLines={1} style={[type.smallMedium, { color: colors.ink }]}>{peer.name}</SemanticHeading>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
             {lastActivity && activeRecently(lastActivity) ? <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: colors.success }} /> : null}
             <Text numberOfLines={1} style={[type.small, { color: colors.muted, fontSize: 10 }]}>
@@ -268,12 +270,32 @@ export function ChatWindow({
           multiline
           maxLength={4000}
           onSubmitEditing={() => void send()}
+          onFocus={() => setComposing(true)}
+          onBlur={() => setComposing(false)}
           onKeyPress={(event) => {
             if (Platform.OS === 'web' && event.nativeEvent.key === 'Enter' && !(event.nativeEvent as { shiftKey?: boolean }).shiftKey) {
               void send();
             }
           }}
-          style={[type.small, { flex: 1, minHeight: 38, maxHeight: 110, color: colors.ink, backgroundColor: colors.backgroundAlt, borderRadius: 14, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 12, paddingVertical: 9 }]}
+          style={[
+            type.small,
+            surfaceTransition(),
+            {
+              flex: 1,
+              minHeight: 38,
+              maxHeight: 110,
+              color: colors.ink,
+              backgroundColor: colors.backgroundAlt,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: composing ? colors.focus : colors.line,
+              paddingHorizontal: 12,
+              paddingVertical: 9,
+              outlineStyle: 'solid' as const,
+              outlineWidth: 0,
+              outlineColor: 'transparent',
+            },
+          ]}
         />
         <PressableScale onPress={() => void send()} disabled={!text.trim() || sending} accessibilityLabel="Send message">
           <View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', opacity: !text.trim() ? 0.45 : 1 }}>

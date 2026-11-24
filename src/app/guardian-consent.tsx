@@ -1,8 +1,10 @@
+import { privatePageMetadata } from '../lib/seo';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { TachiReelMark, TachiReelWordmark } from '../components/Brand';
+import { SemanticHeading } from '../components/SemanticHeading';
 import { Avatar, ClayButton, ClayCard, ClayInput, Notice } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme/theme';
@@ -117,11 +119,11 @@ export default function GuardianConsentScreen() {
   const minorName = request?.minor_display_name ?? 'this teen';
 
   const resultCard = (icon: keyof typeof Feather.glyphMap, tone: 'success' | 'danger', title: string, copy: string, action?: React.ReactNode) => (
-    <ClayCard style={{ padding: 28, alignItems: 'center', gap: 12 }} elevated="lifted">
+    <ClayCard style={{ padding: 24, alignItems: 'center', gap: 12 }} elevated="lifted">
       <View style={{ width: 70, height: 70, borderRadius: 25, backgroundColor: tone === 'success' ? colors.successSoft : colors.dangerSoft, alignItems: 'center', justifyContent: 'center' }}>
         <Feather name={icon} size={30} color={tone === 'success' ? colors.success : colors.danger} />
       </View>
-      <Text style={[type.h2, { color: colors.ink, textAlign: 'center' }]}>{title}</Text>
+      <SemanticHeading style={[type.h2, { color: colors.ink, textAlign: 'center' }]}>{title}</SemanticHeading>
       <Text style={[type.body, { color: colors.muted, textAlign: 'center', lineHeight: 21 }]}>{copy}</Text>
       {action}
     </ClayCard>
@@ -131,7 +133,7 @@ export default function GuardianConsentScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20, justifyContent: 'center' }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <View style={{ width: '100%', maxWidth: 540, alignSelf: 'center', gap: 18 }}>
+          <View style={{ width: '100%', maxWidth: 540, alignSelf: 'center', gap: 16 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Pressable onPress={() => router.replace('/')} style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
                 <TachiReelMark size={34} />
@@ -144,11 +146,11 @@ export default function GuardianConsentScreen() {
             </View>
 
             {!supabase ? (
-              <ClayCard style={{ padding: 26, alignItems: 'center', gap: 12 }}>
+              <ClayCard style={{ padding: 24, alignItems: 'center', gap: 12 }}>
                 <View style={{ width: 66, height: 66, borderRadius: 24, backgroundColor: colors.mintSoft, alignItems: 'center', justifyContent: 'center' }}>
                   <Feather name="shield" size={28} color={colors.success} />
                 </View>
-                <Text style={[type.h2, { color: colors.ink, textAlign: 'center' }]}>Consent review is offline.</Text>
+                <SemanticHeading style={[type.h2, { color: colors.ink, textAlign: 'center' }]}>Consent review is offline.</SemanticHeading>
                 <Text style={[type.small, { color: colors.muted, textAlign: 'center', lineHeight: 19 }]}>
                   Add your Supabase URL and anon key to the .env file to review guardian consent requests.
                 </Text>
@@ -168,7 +170,7 @@ export default function GuardianConsentScreen() {
                 </View>
                 <View style={{ alignItems: 'center' }}>
                   <Text style={[type.tiny, { color: colors.success, marginBottom: 7 }]}>A safer start</Text>
-                  <Text style={[type.h1, { color: colors.ink, textAlign: 'center' }]}>Review a consent request.</Text>
+                  <SemanticHeading style={[type.h1, { color: colors.ink, textAlign: 'center' }]}>Review a consent request.</SemanticHeading>
                   <Text style={[type.body, { color: colors.muted, textAlign: 'center', marginTop: 8 }]}>
                     Enter the consent code from the link your teen shared. You will be able to review the account and approve or decline.
                   </Text>
@@ -193,7 +195,8 @@ export default function GuardianConsentScreen() {
                 </Pressable>
               </>
             ) : loading ? (
-              <ClayCard style={{ padding: 40, alignItems: 'center', gap: 10 }}>
+              <ClayCard style={{ padding: 24, alignItems: 'center', gap: 10 }}>
+                <SemanticHeading visuallyHidden>Guardian consent request</SemanticHeading>
                 <ActivityIndicator color={colors.accent} />
                 <Text style={[type.small, { color: colors.muted }]}>Loading consent request…</Text>
               </ClayCard>
@@ -233,7 +236,7 @@ export default function GuardianConsentScreen() {
               <>
                 <View style={{ alignItems: 'center' }}>
                   <Text style={[type.tiny, { color: colors.success, marginBottom: 7 }]}>A safer start</Text>
-                  <Text style={[type.h1, { color: colors.ink, textAlign: 'center' }]}>Consent for {request.minor_display_name}.</Text>
+                  <SemanticHeading style={[type.h1, { color: colors.ink, textAlign: 'center' }]}>Consent for {request.minor_display_name}.</SemanticHeading>
                   <Text style={[type.body, { color: colors.muted, textAlign: 'center', marginTop: 6 }]}>Please review the request below before deciding.</Text>
                 </View>
 
@@ -288,4 +291,12 @@ export default function GuardianConsentScreen() {
       </KeyboardAvoidingView>
     </View>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Review guardian consent",
+    description: "Review a TachiReel guardian consent request from a private link.",
+    path: "/guardian-consent",
+  });
 }

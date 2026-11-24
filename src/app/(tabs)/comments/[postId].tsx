@@ -1,7 +1,8 @@
+import { privatePageMetadata } from '../../../lib/seo';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { Image } from 'expo-image';
 import { Avatar, ClayCard, EmptyState, ErrorState, LoadingState, Notice, PageHeader, PressableScale } from '../../../components/ui';
 import { DEMO_PEOPLE, DEMO_POSTS, isDemoMode } from '../../../lib/demo-data';
@@ -176,7 +177,7 @@ export default function CommentsScreen() {
 
   const goBack = () => {
     if (router.canGoBack()) router.back();
-    else router.push('/(tabs)');
+    else router.push('/(tabs)/home');
   };
 
   return (
@@ -279,4 +280,16 @@ export default function CommentsScreen() {
       </View>
     </View>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Comments",
+    description: "Read comments on a TachiReel post.",
+    path: "/comments/[postId]",
+  });
+}
+
+export function generateStaticParams() {
+  return [];
 }

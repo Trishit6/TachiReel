@@ -1,8 +1,10 @@
+import { privatePageMetadata } from '../lib/seo';
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { TachiReelMark, TachiReelWordmark } from '../components/Brand';
+import { SemanticHeading } from '../components/SemanticHeading';
 import { ClayButton, ClayCard, ClayInput, IconButton, Notice } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme/theme';
@@ -66,7 +68,7 @@ export default function ResetPasswordScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }} keyboardShouldPersistTaps="handled">
-          <View style={{ width: '100%', maxWidth: 460, alignSelf: 'center', gap: 20 }}>
+          <View style={{ width: '100%', maxWidth: 460, alignSelf: 'center', gap: 18 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Pressable onPress={() => router.replace('/')} style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
                 <TachiReelMark size={34} />
@@ -75,27 +77,30 @@ export default function ResetPasswordScreen() {
               <IconButton icon={resolved === 'dark' ? 'sun' : 'moon'} label="Toggle theme" variant="ghost" size={36} onPress={toggleTheme} />
             </View>
 
-            <ClayCard style={{ padding: 28 }} elevated="lifted" radius={28}>
+            <ClayCard style={{ padding: 24 }} elevated="lifted" radius={28}>
               {!supabase ? (
                 <View style={{ gap: 12 }}>
-                  <Text style={[type.h1, { color: colors.ink }]}>Password reset unavailable.</Text>
+                  <SemanticHeading style={[type.h1, { color: colors.ink }]}>Password reset unavailable.</SemanticHeading>
                   <Notice text="Connect your Supabase project in .env to enable password reset emails." />
                   <ClayButton label="Back to log in" variant="secondary" onPress={() => router.replace('/auth')} />
                 </View>
               ) : checking ? (
-                <Text style={[type.body, { color: colors.muted }]}>Checking your reset link…</Text>
+                <View style={{ gap: 8 }}>
+                  <SemanticHeading visuallyHidden>Reset password</SemanticHeading>
+                  <Text style={[type.body, { color: colors.muted }]}>Checking your reset link…</Text>
+                </View>
               ) : done ? (
                 <View style={{ gap: 14, alignItems: 'center' }}>
                   <View style={{ width: 70, height: 70, borderRadius: 25, backgroundColor: colors.mintSoft, alignItems: 'center', justifyContent: 'center' }}>
                     <Feather name="check" size={28} color={colors.success} />
                   </View>
-                  <Text style={[type.h1, { color: colors.ink, textAlign: 'center' }]}>Password updated.</Text>
+                  <SemanticHeading style={[type.h1, { color: colors.ink, textAlign: 'center' }]}>Password updated.</SemanticHeading>
                   <Text style={[type.body, { color: colors.muted, textAlign: 'center' }]}>Log in with your new password to get back to your corner.</Text>
                   <ClayButton label="Go to log in" full iconRight="arrow-right" onPress={() => void finish()} />
                 </View>
               ) : !hasRecoverySession ? (
                 <View style={{ gap: 12 }}>
-                  <Text style={[type.h1, { color: colors.ink }]}>This link has expired.</Text>
+                  <SemanticHeading style={[type.h1, { color: colors.ink }]}>This link has expired.</SemanticHeading>
                   <Text style={[type.body, { color: colors.muted }]}>
                     Password reset links are single-use and time-limited. Request a fresh one from the log-in screen.
                   </Text>
@@ -104,8 +109,8 @@ export default function ResetPasswordScreen() {
               ) : (
                 <>
                   <Text style={[type.tiny, { color: colors.accent, marginBottom: 6 }]}>One small step</Text>
-                  <Text style={[type.h1, { color: colors.ink }]}>Choose a new password.</Text>
-                  <Text style={[type.body, { color: colors.muted, marginTop: 8, marginBottom: 18 }]}>
+                  <SemanticHeading style={[type.h1, { color: colors.ink }]}>Choose a new password.</SemanticHeading>
+                  <Text style={[type.body, { color: colors.muted, marginTop: 8, marginBottom: 14 }]}>
                     Make it something only you would know. At least 8 characters.
                   </Text>
                   <View style={{ gap: 12 }}>
@@ -134,7 +139,7 @@ export default function ResetPasswordScreen() {
                     />
                   </View>
                   {error ? <View style={{ marginTop: 12 }}><Notice text={error} tone="error" /></View> : null}
-                  <View style={{ marginTop: 18 }}>
+                  <View style={{ marginTop: 16 }}>
                     <ClayButton label="Update password" full size="lg" loading={busy} onPress={() => void submit()} />
                   </View>
                 </>
@@ -145,4 +150,12 @@ export default function ResetPasswordScreen() {
       </KeyboardAvoidingView>
     </View>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Reset password",
+    description: "Choose a new password for your TachiReel account.",
+    path: "/reset-password",
+  });
 }

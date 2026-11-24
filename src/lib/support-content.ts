@@ -23,6 +23,20 @@ export const SUPPORT_ARTICLES: SupportArticle[] = [
     ],
   },
   {
+    slug: 'community-guidelines',
+    title: 'TachiReel community guidelines',
+    summary: 'The simple rules that keep TachiReel kind, private and welcoming for everyone.',
+    category: 'Safety',
+    minutes: 3,
+    keywords: ['community', 'guidelines', 'kindness', 'respect', 'safety', 'harassment'],
+    sections: [
+      { heading: 'Be kind to people, not just to posts', body: 'Disagree without putting someone down. Comments should add something useful, generous or encouraging. Harassment, threats, doxxing and targeted cruelty are not welcome.' },
+      { heading: 'Share only what you can share', body: 'Post your own moments or work you have permission to share. Respect privacy, consent and copyright, and never post someone else’s private information.' },
+      { heading: 'Keep young people safe', body: 'Do not pressure a teen account for messages, images or personal details. TachiReel limits teen visibility, sensitive content and messaging for their safety.' },
+      { heading: 'Report, do not escalate', body: 'If something feels wrong, use the report control instead of arguing in comments. Reports go to moderators who can review the post and take action.' },
+    ],
+  },
+  {
     slug: 'post-review',
     title: 'Why a new post is waiting',
     summary: 'New posts and Reelyx videos are reviewed before they appear in feeds. Learn why and what to do next.',
@@ -121,6 +135,7 @@ export const SUPPORT_ARTICLES: SupportArticle[] = [
 export type SupportFaq = { question: string; answer: string; articleSlug: string };
 
 export const SUPPORT_FAQS: SupportFaq[] = [
+  { question: 'What belongs in a TachiReel post?', answer: 'Share your own moments, be kind to people, and respect privacy, consent and safety limits.', articleSlug: 'community-guidelines' },
   { question: 'Why can’t I see my new post?', answer: 'New posts and Reelyx videos wait for review and appear once marked safe.', articleSlug: 'post-review' },
   { question: 'How do I move to the next Reelyx video?', answer: 'Swipe, scroll with the mouse wheel, use the arrow keys, or tap the on-screen controls.', articleSlug: 'reelyx' },
   { question: 'Can a teen account be public?', answer: 'No. Teen accounts cannot be public and sensitive content stays off.', articleSlug: 'teen-safety' },
@@ -132,10 +147,60 @@ export const SUPPORT_FAQS: SupportFaq[] = [
 
 export type SupportSearchResult = { article: SupportArticle; score: number };
 
+// Admin-published help content is layered in front of the built-in guides when
+// supabase/admin_schema.sql has been applied. The static guides remain the safe
+// fallback in Preview mode and while the migration is not deployed.
+let publishedArticles: SupportArticle[] = [];
+let publishedFaqs: SupportFaq[] = [];
+
+export function allSupportArticles(): SupportArticle[] {
+  return [...publishedArticles, ...SUPPORT_ARTICLES];
+}
+
+export function allSupportFaqs(): SupportFaq[] {
+  return [...publishedFaqs, ...SUPPORT_FAQS];
+}
+
+type PublishedHelpRow = Record<string, unknown>;
+
+function text(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+/** Fetch the anonymous-safe published help RPC and cache it for all support routes. */
+export async function loadPublishedHelpContent(
+  client: { rpc: (name: string) => PromiseLike<{ data: unknown; error: { message: string } | null }> },
+): Promise<boolean> {
+  const { data, error } = await client.rpc('get_published_help_content');
+  if (error) return false;
+  if (!data || typeof data !== 'object') return false;
+  const payload = data as { articles?: PublishedHelpRow[]; faqs?: PublishedHelpRow[] };
+  publishedArticles = (payload.articles ?? []).map((row): SupportArticle => ({
+    slug: text(row.slug),
+    title: text(row.title),
+    summary: text(row.summary),
+    category: 'Support',
+    minutes: Number(row.minutes) || 2,
+    keywords: Array.isArray(row.keywords) ? row.keywords.map((item) => text(item)).filter(Boolean) : [],
+    sections: Array.isArray(row.sections)
+      ? row.sections.map((section) => {
+          const item = (section ?? {}) as PublishedHelpRow;
+          return { heading: text(item.heading), body: text(item.body) };
+        }).filter((section) => section.heading || section.body)
+      : [],
+  })).filter((article) => article.slug && article.title);
+  publishedFaqs = (payload.faqs ?? []).map((row) => ({
+    question: text(row.question),
+    answer: text(row.answer),
+    articleSlug: text(row.article_slug),
+  })).filter((faq) => faq.question && faq.articleSlug);
+  return true;
+}
+
 export function searchSupportArticles(query: string): SupportSearchResult[] {
   const terms = query.toLowerCase().split(/\s+/).map((term) => term.trim()).filter(Boolean);
   if (terms.length === 0) return [];
-  return SUPPORT_ARTICLES.map((article) => {
+  return allSupportArticles().map((article) => {
     const haystack = [article.title, article.summary, article.category, ...article.keywords, ...article.sections.flatMap((section) => [section.heading, section.body])].join(' ').toLowerCase();
     const score = terms.reduce((total, term) => total + (haystack.includes(term) ? 1 + (article.title.toLowerCase().includes(term) ? 2 : 0) : 0), 0);
     return { article, score };
@@ -143,5 +208,5 @@ export function searchSupportArticles(query: string): SupportSearchResult[] {
 }
 
 export function getSupportArticle(slug: string | undefined): SupportArticle | undefined {
-  return SUPPORT_ARTICLES.find((article) => article.slug === slug);
+  return allSupportArticles().find((article) => article.slug === slug);
 }

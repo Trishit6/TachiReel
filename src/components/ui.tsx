@@ -16,9 +16,10 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { ClayCard } from './ClayCard';
-import { useTheme } from '../theme/theme';
+import { SemanticHeading } from './SemanticHeading';
+import { surfaceTransition, useTheme } from '../theme/theme';
 
 export { ClayCard } from './ClayCard';
 
@@ -130,14 +131,24 @@ export function PressableScale({
   onBlur?: (event?: any) => void;
   focusRingMode?: 'default' | 'keyboard';
 }) {
-  const { colors, radii, reduceMotion } = useTheme();
+  const { colors, radii, reduceMotion, motion } = useTheme();
   const [scale] = useState(() => new Animated.Value(1));
   const [keyboardFocus, setKeyboardFocus] = useState(false);
 
   const animate = (to: number) => {
-    if (reduceMotion) return;
-    Animated.spring(scale, { toValue: to, useNativeDriver: Platform.OS !== 'web', speed: 32, bounciness: 0 }).start();
+    if (reduceMotion) {
+      scale.setValue(to);
+      return;
+    }
+    Animated.timing(scale, {
+      toValue: to,
+      duration: motion.duration.fast,
+      easing: motion.easing,
+      useNativeDriver: Platform.OS !== 'web',
+    }).start();
   };
+
+  useEffect(() => () => scale.stopAnimation(), [scale]);
 
   const syncKeyboardFocus = (event?: any) => {
     if (focusRingMode !== 'keyboard' || Platform.OS !== 'web') return;
@@ -170,19 +181,13 @@ export function PressableScale({
       onLongPress={onLongPress}
       onPressIn={(event: any) => {
         syncKeyboardFocus(event);
-        animate(0.98);
+        animate(0.97);
       }}
       onPressOut={() => animate(1)}
       onFocus={handleFocus}
       onBlur={handleBlur}
-      onHoverIn={() => {
-        onHoverIn?.();
-        animate(1.012);
-      }}
-      onHoverOut={() => {
-        onHoverOut?.();
-        animate(1);
-      }}
+      onHoverIn={() => onHoverIn?.()}
+      onHoverOut={() => onHoverOut?.()}
       hitSlop={hitSlop}
       style={(state: any) => [
         style,
@@ -277,6 +282,7 @@ export function ClayButton({
             gap: 8,
           },
           (variant === 'primary' || variant === 'destructive') && !inactive ? shadows.soft : undefined,
+          surfaceTransition(),
         ].filter(Boolean)}
       >
         {loading ? (
@@ -355,6 +361,7 @@ export function IconButton({
           backgroundColor: background,
           borderWidth: variant === 'ghost' ? 0 : 1,
           borderColor: active ? colors.accent : colors.line,
+          ...surfaceTransition(),
         }}
       >
         {loading ? (
@@ -398,6 +405,7 @@ export function ClayInput({
           borderWidth: 1,
           borderColor: error ? colors.danger : focused ? colors.focus : colors.inputBorder,
           backgroundColor: colors.input,
+          ...surfaceTransition(),
           flexDirection: 'row',
           alignItems: multiline ? 'flex-start' : 'center',
           paddingHorizontal: 14,
@@ -428,6 +436,9 @@ export function ClayInput({
               paddingVertical: multiline ? 0 : 12,
               minHeight: multiline ? 92 : undefined,
               textAlignVertical: multiline ? 'top' : 'center',
+              outlineStyle: 'solid' as const,
+              outlineWidth: 0,
+              outlineColor: 'transparent',
             },
             inputStyle,
           ]}
@@ -462,6 +473,16 @@ export function SearchField({
 }) {
   const { colors, radii, type } = useTheme();
   const [focused, setFocused] = useState(false);
+  const [pointerFocus, setPointerFocus] = useState(false);
+
+  // Text inputs always match :focus-visible in Chromium, so pointer intent has
+  // to be tracked explicitly. Mouse/touch focus stays borderless; keyboard
+  // focus keeps a deliberate, theme-coloured ring.
+  const pointerProps = Platform.OS === 'web'
+    ? ({ onPointerDown: () => setPointerFocus(true) } as unknown as TextInputProps)
+    : {};
+  const keyboardFocus = focused && !pointerFocus;
+
   return (
     <View
       style={[
@@ -469,18 +490,28 @@ export function SearchField({
           height: compact ? 40 : 46,
           borderRadius: radii.pill,
           borderWidth: 1,
-          borderColor: focused ? colors.focus : colors.inputBorder,
+          borderColor: keyboardFocus ? colors.focus : 'transparent',
           backgroundColor: colors.input,
           flexDirection: 'row',
           alignItems: 'center',
           gap: 9,
           paddingHorizontal: 14,
+          ...surfaceTransition(),
+          ...(keyboardFocus
+            ? {
+                outlineStyle: 'solid' as const,
+                outlineWidth: 2,
+                outlineColor: colors.focus,
+                outlineOffset: 2,
+              }
+            : {}),
         },
         style,
       ]}
     >
       <Feather name="search" size={compact ? 14 : 16} color={focused ? colors.focus : colors.muted} />
       <TextInput
+        {...pointerProps}
         value={value}
         onChangeText={onChangeText}
         onSubmitEditing={onSubmit}
@@ -493,10 +524,23 @@ export function SearchField({
         }}
         onBlur={() => {
           setFocused(false);
+          setPointerFocus(false);
           onBlur?.();
         }}
         onKeyDown={onKeyDown}
-        style={[type.small, { flex: 1, color: colors.ink, paddingVertical: 0 }]}
+        // Chromium applies its own light outline to focused text inputs.
+        // Override it here instead of hiding it with an unrelated wrapper rule.
+        style={[
+          type.small,
+          {
+            flex: 1,
+            color: colors.ink,
+            paddingVertical: 0,
+            outlineStyle: 'solid' as const,
+            outlineWidth: 0,
+            outlineColor: 'transparent',
+          },
+        ]}
       />
       {value.length > 0 ? (
         <Pressable onPress={() => onChangeText('')} accessibilityLabel="Clear search" hitSlop={8}>
@@ -575,7 +619,7 @@ export function PageHeader({
     <View style={[{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }, style]}>
       <View style={{ flexShrink: 1, minWidth: 220 }}>
         {eyebrow ? <Text style={[type.overline, { color: colors.muted, marginBottom: 7 }]}>{eyebrow}</Text> : null}
-        <Text style={[type.h1, { color: colors.ink }]}>{title}</Text>
+        <SemanticHeading style={[type.h1, { color: colors.ink }]}>{title}</SemanticHeading>
         {subtitle ? <Text style={[type.body, { color: colors.muted, marginTop: 4 }]}>{subtitle}</Text> : null}
       </View>
       {actions ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>{actions}</View> : null}
@@ -611,7 +655,7 @@ export function EmptyState({
 }) {
   const { colors, type } = useTheme();
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 44, paddingHorizontal: 24, gap: 10 }}>
+    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 32, paddingHorizontal: 20, gap: 10 }}>
       <View
         style={{
           width: 66,
@@ -636,7 +680,7 @@ export function EmptyState({
 export function LoadingState({ label = 'Loading' }: { label?: string }) {
   const { colors, type } = useTheme();
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 12 }}>
+    <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 36, gap: 12 }}>
       <ActivityIndicator color={colors.accent} />
       <Text style={[type.small, { color: colors.muted }]}>{label}</Text>
     </View>
@@ -696,6 +740,81 @@ export function Notice({ text, tone = 'info' }: { text: string; tone?: 'info' | 
   );
 }
 
+/** Shared fade + lift transition for modal surfaces, with a matching backdrop. */
+function AnimatedModal({
+  visible,
+  onClose,
+  children,
+  width,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  width?: number;
+}) {
+  const { colors, motion, reduceMotion } = useTheme();
+  const [rendered, setRendered] = useState(visible);
+  const [opacity] = useState(() => new Animated.Value(visible ? 1 : 0));
+  const [lift] = useState(() => new Animated.Value(visible ? 0 : 12));
+  const running = useRef<Animated.CompositeAnimation | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      running.current?.stop();
+      const duration = reduceMotion ? 0 : motion.duration.panel;
+      const timing = (value: Animated.Value, toValue: number) =>
+        Animated.timing(value, {
+          toValue,
+          duration,
+          easing: motion.easing,
+          useNativeDriver: Platform.OS !== 'web',
+        });
+
+      if (visible) {
+        setRendered(true);
+        if (reduceMotion) {
+          opacity.setValue(1);
+          lift.setValue(0);
+          return;
+        }
+        opacity.setValue(0);
+        lift.setValue(12);
+        running.current = Animated.parallel([timing(opacity, 1), timing(lift, 0)]);
+        running.current.start();
+      } else if (reduceMotion) {
+        setRendered(false);
+      } else {
+        running.current = Animated.parallel([timing(opacity, 0), timing(lift, 12)]);
+        running.current.start(({ finished }) => {
+          if (finished) setRendered(false);
+        });
+      }
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+      running.current?.stop();
+    };
+  }, [visible, reduceMotion, opacity, lift, motion]);
+
+  return (
+    <Modal visible={rendered} transparent animationType="none" onRequestClose={onClose} accessibilityViewIsModal>
+      <Animated.View style={{ flex: 1, backgroundColor: colors.overlay, opacity, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close dialog" />
+        <Animated.View
+          style={{
+            width: '100%',
+            maxWidth: width ?? 430,
+            opacity,
+            transform: [{ translateY: lift }],
+          }}
+        >
+          {children}
+        </Animated.View>
+      </Animated.View>
+    </Modal>
+  );
+}
+
 export function Dialog({
   visible,
   title,
@@ -721,23 +840,42 @@ export function Dialog({
 }) {
   const { colors, type } = useTheme();
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={{ flex: 1, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} accessibilityLabel="Close dialog" />
-        <ClayCard style={{ width: '100%', maxWidth: 430, padding: 24, gap: 12 }} elevated="floating">
-          <Text style={[type.h3, { color: colors.ink }]}>{title}</Text>
-          {message ? <Text style={[type.body, { color: colors.muted }]}>{message}</Text> : null}
-          {children}
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-            <ClayButton label={cancelLabel} variant="ghost" size="sm" onPress={onCancel} disabled={loading} />
-            {onConfirm ? (
-              <ClayButton label={confirmLabel} variant={destructive ? 'destructive' : 'primary'} size="sm" onPress={onConfirm} loading={loading} />
-            ) : null}
-          </View>
-        </ClayCard>
-      </View>
-    </Modal>
+    <AnimatedModal visible={visible} onClose={onCancel}>
+      <ClayCard style={{ width: '100%', maxWidth: 430, padding: 24, gap: 12 }} elevated="floating">
+        <Text style={[type.h3, { color: colors.ink }]}>{title}</Text>
+        {message ? <Text style={[type.body, { color: colors.muted }]}>{message}</Text> : null}
+        {children}
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+          <ClayButton label={cancelLabel} variant="ghost" size="sm" onPress={onCancel} disabled={loading} />
+          {onConfirm ? (
+            <ClayButton label={confirmLabel} variant={destructive ? 'destructive' : 'primary'} size="sm" onPress={onConfirm} loading={loading} />
+          ) : null}
+        </View>
+      </ClayCard>
+    </AnimatedModal>
   );
+}
+
+/** Subtle entrance for transient surfaces (menus, suggestion lists, popovers). */
+export function FadeIn({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const { motion, reduceMotion } = useTheme();
+  const [opacity] = useState(() => new Animated.Value(0));
+  const [lift] = useState(() => new Animated.Value(6));
+
+  useEffect(() => {
+    if (reduceMotion) {
+      opacity.setValue(1);
+      lift.setValue(0);
+      return;
+    }
+    const timing = (value: Animated.Value, toValue: number) =>
+      Animated.timing(value, { toValue, duration: motion.duration.fast, easing: motion.easing, useNativeDriver: Platform.OS !== 'web' });
+    const animation = Animated.parallel([timing(opacity, 1), timing(lift, 0)]);
+    animation.start();
+    return () => animation.stop();
+  }, [opacity, lift, motion, reduceMotion]);
+
+  return <Animated.View style={[{ opacity, transform: [{ translateY: lift }] }, style]}>{children}</Animated.View>;
 }
 
 export function Divider({ style }: { style?: StyleProp<ViewStyle> }) {
@@ -763,7 +901,7 @@ export function ScreenScroll({
       showsVerticalScrollIndicator={false}
       refreshControl={refreshControl}
       contentContainerStyle={[
-        { width: '100%', maxWidth, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 96, gap: spacing.xl },
+        { width: '100%', maxWidth, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 80, gap: spacing.lg },
         contentContainerStyle,
       ]}
     >
@@ -863,6 +1001,7 @@ export function Select({
             flexDirection: 'row',
             alignItems: 'center',
             gap: 10,
+            ...surfaceTransition(),
           }}
         >
           {selected?.icon ? <Feather name={selected.icon} size={16} color={colors.accent} /> : null}
@@ -879,22 +1018,18 @@ export function Select({
             onPress={() => setOpen(false)}
             accessibilityLabel="Close options"
           />
-          <View
-            style={{
-              position: 'absolute',
-              top: label ? 72 : 54,
-              left: 0,
-              right: 0,
-              maxHeight: 240,
-              backgroundColor: colors.surfaceRaised,
-              borderWidth: 1,
-              borderColor: colors.line,
-              borderRadius: radii.input,
-              padding: 5,
-              zIndex: 30,
-            }}
-          >
-            <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
+          <FadeIn style={{ position: 'absolute', top: label ? 72 : 54, left: 0, right: 0, maxHeight: 240, zIndex: 30 }}>
+            <View
+              style={{
+                backgroundColor: colors.surfaceRaised,
+                borderWidth: 1,
+                borderColor: colors.line,
+                borderRadius: radii.input,
+                padding: 5,
+                ...surfaceTransition(),
+              }}
+            >
+              <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={false}>
               {options.map((option) => {
                 const active = option.value === value;
                 return (
@@ -925,8 +1060,9 @@ export function Select({
                   </Pressable>
                 );
               })}
-            </ScrollView>
-          </View>
+              </ScrollView>
+            </View>
+          </FadeIn>
         </>
       ) : null}
     </View>
@@ -972,6 +1108,7 @@ export function Checkbox({
           backgroundColor: checked ? colors.accent : colors.input,
           alignItems: 'center',
           justifyContent: 'center',
+          ...surfaceTransition(),
         }}
       >
         {checked ? <Feather name="check" size={13} color={colors.accentContrast} /> : null}
@@ -995,16 +1132,18 @@ export function SwitchControl({
   label: string;
   disabled?: boolean;
 }) {
-  const { colors } = useTheme();
-  const { reduceMotion } = useTheme();
+  const { colors, motion, reduceMotion } = useTheme();
   const [knob] = useState(() => new Animated.Value(checked ? 1 : 0));
   useEffect(() => {
-    Animated.timing(knob, {
+    const animation = Animated.timing(knob, {
       toValue: checked ? 1 : 0,
-      duration: reduceMotion ? 0 : 180,
+      duration: reduceMotion ? 0 : motion.duration.fast,
+      easing: motion.easing,
       useNativeDriver: false,
-    }).start();
-  }, [checked, knob, reduceMotion]);
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [checked, knob, motion, reduceMotion]);
   const left = knob.interpolate({ inputRange: [0, 1], outputRange: [3, 25] });
   return (
     <Pressable
@@ -1023,6 +1162,7 @@ export function SwitchControl({
           borderWidth: 1,
           borderColor: checked ? colors.accentHover : colors.line,
           justifyContent: 'center',
+          ...surfaceTransition(),
         }}
       >
         <Animated.View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.surface, left, shadowColor: '#1B1C19', shadowOpacity: 0.16, shadowRadius: 3, elevation: 2 }} />
@@ -1203,24 +1343,20 @@ export function Dropdown({
       {open ? (
         <>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)} accessibilityLabel={`Close ${label}`} />
-          <View
-            style={[
-              shadows.lifted,
-              {
-                position: 'absolute',
-                top: '100%',
-                marginTop: 8,
-                [align]: 0,
-                width,
-                backgroundColor: colors.surfaceRaised,
-                borderRadius: radii.card,
-                borderWidth: 1,
-                borderColor: colors.line,
-                padding: 9,
-                zIndex: 50,
-              },
-            ]}
-          >
+          <FadeIn style={{ position: 'absolute', top: '100%', marginTop: 8, [align]: 0, width, zIndex: 50 }}>
+            <View
+              style={[
+                shadows.lifted,
+                surfaceTransition(),
+                {
+                  backgroundColor: colors.surfaceRaised,
+                  borderRadius: radii.card,
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                  padding: 9,
+                },
+              ]}
+            >
             {header ? <View style={{ paddingHorizontal: 5, paddingBottom: 9 }}>{header}</View> : null}
             {header ? <Divider style={{ marginBottom: 5 }} /> : null}
             {items.map((item) => (
@@ -1261,7 +1397,8 @@ export function Dropdown({
                 </Text>
               </Pressable>
             ))}
-          </View>
+            </View>
+          </FadeIn>
         </>
       ) : null}
     </View>
@@ -1339,16 +1476,12 @@ export function ModalCard({
   children: ReactNode;
   width?: number;
 }) {
-  const { colors } = useTheme();
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close dialog" />
-        <ClayCard style={{ width: '100%', maxWidth: width, padding: 24 }} elevated="floating">
-          {children}
-        </ClayCard>
-      </View>
-    </Modal>
+    <AnimatedModal visible={visible} onClose={onClose} width={width}>
+      <ClayCard style={{ width: '100%', maxWidth: width, padding: 24 }} elevated="floating">
+        {children}
+      </ClayCard>
+    </AnimatedModal>
   );
 }
 
@@ -1388,11 +1521,64 @@ export function ConfirmDialog({
  * ========================================================================== */
 
 type ToastTone = 'info' | 'success' | 'error';
-type ToastItem = { id: number; message: string; tone: ToastTone };
+type ToastItem = { id: number; message: string; tone: ToastTone; leaving?: boolean };
 const ToastContext = createContext<{ show: (message: string, tone?: ToastTone) => void } | null>(null);
 
+const TOAST_VISIBLE_MS = 3400;
+
+function ToastRow({ item, onDismiss }: { item: ToastItem; onDismiss: () => void }) {
+  const { colors, radii, type, shadows, motion, reduceMotion } = useTheme();
+  const [opacity] = useState(() => new Animated.Value(0));
+  const [lift] = useState(() => new Animated.Value(10));
+  const iconFor: Record<ToastTone, IconName> = { info: 'info', success: 'check-circle', error: 'alert-circle' };
+  const colorFor: Record<ToastTone, string> = { info: colors.accent, success: colors.success, error: colors.danger };
+
+  useEffect(() => {
+    const duration = reduceMotion ? 0 : motion.duration.standard;
+    const timing = (value: Animated.Value, toValue: number) =>
+      Animated.timing(value, { toValue, duration, easing: motion.easing, useNativeDriver: Platform.OS !== 'web' });
+    const animation = Animated.parallel([
+      timing(opacity, item.leaving ? 0 : 1),
+      timing(lift, item.leaving ? 10 : 0),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [item.leaving, opacity, lift, motion, reduceMotion]);
+
+  return (
+    <Animated.View
+      accessibilityLabel={item.message}
+      accessibilityRole="alert"
+      style={[
+        shadows.lifted,
+        surfaceTransition(),
+        {
+          maxWidth: 420,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 9,
+          backgroundColor: colors.surfaceRaised,
+          borderWidth: 1,
+          borderColor: colors.line,
+          borderRadius: radii.input,
+          paddingVertical: 11,
+          paddingHorizontal: 13,
+          opacity,
+          transform: [{ translateY: lift }],
+        },
+      ]}
+    >
+      <Feather name={iconFor[item.tone]} size={16} color={colorFor[item.tone]} />
+      <Text style={[type.smallMedium, { color: colors.ink, flexShrink: 1 }]}>{item.message}</Text>
+      <Pressable onPress={onDismiss} accessibilityLabel="Dismiss notification" hitSlop={8}>
+        <Feather name="x" size={14} color={colors.muted} />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const { colors, radii, type, shadows } = useTheme();
+  const { motion } = useTheme();
   const { width } = useWindowDimensions();
   const [items, setItems] = useState<ToastItem[]>([]);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -1400,15 +1586,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
+  const dismiss = useCallback((id: number) => {
+    setItems((current) => current.map((item) => (item.id === id ? { ...item, leaving: true } : item)));
+    timers.current.push(setTimeout(() => setItems((current) => current.filter((item) => item.id !== id)), motion.duration.panel));
+  }, [motion.duration.panel]);
+
   const show = useCallback((message: string, tone: ToastTone = 'info') => {
     const id = (nextId.current += 1);
     setItems((current) => [...current.slice(-2), { id, message, tone }]);
-    timers.current.push(setTimeout(() => setItems((current) => current.filter((item) => item.id !== id)), 3400));
-  }, []);
+    timers.current.push(setTimeout(() => dismiss(id), TOAST_VISIBLE_MS));
+  }, [dismiss]);
 
   const value = useMemo(() => ({ show }), [show]);
-  const iconFor: Record<ToastTone, IconName> = { info: 'info', success: 'check-circle', error: 'alert-circle' };
-  const colorFor: Record<ToastTone, string> = { info: colors.accent, success: colors.success, error: colors.danger };
 
   return (
     <ToastContext.Provider value={value}>
@@ -1427,32 +1616,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         }}
       >
         {items.map((item) => (
-          <View
-            key={item.id}
-            accessibilityLabel={item.message}
-            accessibilityRole="alert"
-            style={[
-              shadows.lifted,
-              {
-                maxWidth: 420,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 9,
-                backgroundColor: colors.surfaceRaised,
-                borderWidth: 1,
-                borderColor: colors.line,
-                borderRadius: radii.input,
-                paddingVertical: 11,
-                paddingHorizontal: 13,
-              },
-            ]}
-          >
-            <Feather name={iconFor[item.tone]} size={16} color={colorFor[item.tone]} />
-            <Text style={[type.smallMedium, { color: colors.ink, flexShrink: 1 }]}>{item.message}</Text>
-            <Pressable onPress={() => setItems((current) => current.filter((toast) => toast.id !== item.id))} accessibilityLabel="Dismiss notification" hitSlop={8}>
-              <Feather name="x" size={14} color={colors.muted} />
-            </Pressable>
-          </View>
+          <ToastRow key={item.id} item={item} onDismiss={() => dismiss(item.id)} />
         ))}
       </View>
     </ToastContext.Provider>

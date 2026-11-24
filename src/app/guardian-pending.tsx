@@ -1,9 +1,11 @@
+import { privatePageMetadata } from '../lib/seo';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, Share, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { TachiReelMark, TachiReelWordmark } from '../components/Brand';
+import { SemanticHeading } from '../components/SemanticHeading';
 import { ClayButton, ClayCard, ClayInput, Notice, useToast } from '../components/ui';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme/theme';
@@ -65,7 +67,7 @@ export default function GuardianPendingScreen() {
         return;
       }
       if (state.active) {
-        router.replace('/(tabs)');
+        router.replace('/(tabs)/home');
         return;
       }
       setRequest(state.request);
@@ -87,7 +89,7 @@ export default function GuardianPendingScreen() {
           return;
         }
         if (state.active) {
-          router.replace('/(tabs)');
+          router.replace('/(tabs)/home');
           return;
         }
         setRequest(state.request);
@@ -173,7 +175,7 @@ export default function GuardianPendingScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20 }} showsVerticalScrollIndicator={false}>
-        <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center', flex: 1, gap: 18 }}>
+        <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center', flex: 1, gap: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Pressable onPress={() => router.replace('/')} style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
               <TachiReelMark size={34} />
@@ -186,24 +188,25 @@ export default function GuardianPendingScreen() {
           </View>
 
           {!supabase ? (
-            <ClayCard style={{ padding: 26, alignItems: 'center', gap: 12 }}>
+            <ClayCard style={{ padding: 24, alignItems: 'center', gap: 12 }}>
               <View style={{ width: 66, height: 66, borderRadius: 24, backgroundColor: colors.mintSoft, alignItems: 'center', justifyContent: 'center' }}>
                 <Feather name="shield" size={28} color={colors.success} />
               </View>
-              <Text style={[type.h2, { color: colors.ink, textAlign: 'center' }]}>Consent needs a backend.</Text>
+              <SemanticHeading style={[type.h2, { color: colors.ink, textAlign: 'center' }]}>Consent needs a backend.</SemanticHeading>
               <Text style={[type.small, { color: colors.muted, textAlign: 'center', lineHeight: 19 }]}>
                 Add your Supabase URL and anon key to the .env file to manage guardian consent requests.
               </Text>
               <ClayButton label="Back to log in" variant="secondary" onPress={() => router.replace('/auth')} />
             </ClayCard>
           ) : loading ? (
-            <ClayCard style={{ padding: 40, alignItems: 'center', gap: 10 }}>
+            <ClayCard style={{ padding: 24, alignItems: 'center', gap: 10 }}>
+              <SemanticHeading visuallyHidden>Guardian consent status</SemanticHeading>
               <ActivityIndicator color={colors.accent} />
               <Text style={[type.small, { color: colors.muted }]}>Checking your consent status…</Text>
             </ClayCard>
           ) : (
             <>
-              <View style={{ alignItems: 'center', paddingTop: 8 }}>
+              <View style={{ alignItems: 'center', paddingTop: 4 }}>
                 <View style={{ width: 108, height: 108, borderRadius: 38, backgroundColor: colors.mintSoft, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-6deg' }], borderWidth: 1, borderColor: colors.mint }}>
                   <View style={{ width: 78, height: 78, borderRadius: 27, backgroundColor: colors.mint, alignItems: 'center', justifyContent: 'center' }}>
                     <Feather name="shield" size={34} color={colors.success} />
@@ -215,9 +218,9 @@ export default function GuardianPendingScreen() {
               </View>
               <View style={{ alignItems: 'center' }}>
                 <Text style={[type.tiny, { color: colors.success, marginBottom: 7 }]}>One last safety step</Text>
-                <Text style={[type.h1, { color: colors.ink, textAlign: 'center' }]}>
+                <SemanticHeading style={[type.h1, { color: colors.ink, textAlign: 'center' }]}>
                   {isWaiting ? 'Waiting for your guardian.' : wasDeclined ? 'A new request is okay.' : wasExpired ? 'That link has expired.' : 'A little safety first.'}
-                </Text>
+                </SemanticHeading>
                 <Text style={[type.body, { color: colors.muted, textAlign: 'center', marginTop: 8, maxWidth: 440 }]}>
                   {isWaiting
                     ? 'Share your private consent link with your parent or guardian. Your account activates as soon as they approve.'
@@ -287,4 +290,12 @@ export default function GuardianPendingScreen() {
       </ScrollView>
     </View>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Guardian consent status",
+    description: "Check the status of a TachiReel guardian consent request.",
+    path: "/guardian-pending",
+  });
 }

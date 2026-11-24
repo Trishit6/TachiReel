@@ -1,3 +1,4 @@
+import { privatePageMetadata } from '../../lib/seo';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
@@ -10,7 +11,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -367,7 +368,7 @@ export default function DiscoverScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ width: '100%', maxWidth: 1280, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 96 }}
+      contentContainerStyle={{ width: '100%', maxWidth: 1280, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 80 }}
       showsVerticalScrollIndicator={false}
       onScroll={onScroll}
       scrollEventThrottle={200}
@@ -395,7 +396,7 @@ export default function DiscoverScreen() {
         }
       />
 
-      <View style={{ gap: 14, marginTop: 22 }}>
+      <View style={{ gap: 14, marginTop: 16 }}>
         <SearchField
           value={search}
           onChangeText={setSearch}
@@ -420,7 +421,7 @@ export default function DiscoverScreen() {
       ) : null}
 
       {loading ? (
-        <View style={{ marginTop: 22, gap: 16 }}>
+        <View style={{ marginTop: 18, gap: 16 }}>
           <Skeleton height={260} radius={20} />
           <View style={{ flexDirection: 'row', gap: 12 }}>
             {Array.from({ length: columns }).map((_, column) => (
@@ -439,13 +440,13 @@ export default function DiscoverScreen() {
           </View>
         </View>
       ) : error ? (
-        <ClayCard style={{ marginTop: 22 }}>
+        <ClayCard style={{ marginTop: 18 }}>
           <ErrorState message={error} onRetry={() => void refresh()} />
         </ClayCard>
       ) : (
         <>
           {peopleResults.length > 0 ? (
-            <View style={{ marginTop: 22 }}>
+            <View style={{ marginTop: 18 }}>
               <SectionHeader title="People" subtitle={`Matching “${search.trim()}”`} />
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
                 {peopleResults.map((person) => (
@@ -463,7 +464,7 @@ export default function DiscoverScreen() {
           ) : null}
 
           {featured.length > 0 ? (
-            <View style={{ marginTop: 26 }}>
+            <View style={{ marginTop: 20 }}>
               <SectionHeader
                 title="Featured today"
                 subtitle="The moments people are pausing on"
@@ -500,9 +501,9 @@ export default function DiscoverScreen() {
             </View>
           ) : null}
 
-          <View style={{ flexDirection: wide ? 'row' : 'column', gap: 26, alignItems: wide ? 'flex-start' : 'stretch', marginTop: 30 }}>
+          <View style={{ flexDirection: wide ? 'row' : 'column', gap: wide ? 20 : 16, alignItems: wide ? 'flex-start' : 'stretch', marginTop: 20 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <Text style={[type.h3, { color: colors.ink }]}>{category === 'All' ? 'Made for your mood' : category}</Text>
                   <Text style={[type.small, { color: colors.muted, marginTop: 2 }]}>
@@ -545,7 +546,7 @@ export default function DiscoverScreen() {
                     ))}
                   </View>
 
-                  <View style={{ alignItems: 'center', marginTop: 20, gap: 10 }}>
+                  <View style={{ alignItems: 'center', marginTop: 16, gap: 10 }}>
                     {hasMore ? (
                       <ClayButton
                         label={`Load more moments (${filtered.length - visible})`}
@@ -582,7 +583,7 @@ export default function DiscoverScreen() {
           </View>
 
           {!wide ? (
-            <View style={{ marginTop: 26 }}>
+            <View style={{ marginTop: 20 }}>
               <DiscoverySidebar
                 trending={trending}
                 people={suggestedPeople}
@@ -964,4 +965,12 @@ function DiscoverySidebar({
       </ClayCard>
     </View>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Explore",
+    description: "Search people, captions, hashtags and places on TachiReel.",
+    path: "/discover",
+  });
 }

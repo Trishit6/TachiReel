@@ -1,8 +1,9 @@
+import { privatePageMetadata } from '../../../lib/seo';
 import { useCallback, useState } from 'react';
 import { Platform, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import {
   Badge,
   ClayButton,
@@ -99,7 +100,7 @@ export default function NewSupportTicketScreen() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ width: '100%', maxWidth: 820, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 100, gap: 18 }}
+      contentContainerStyle={{ width: '100%', maxWidth: 820, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 24, paddingBottom: 80, gap: 18 }}
       showsVerticalScrollIndicator={false}
     >
       <PageHeader
@@ -180,4 +181,12 @@ export default function NewSupportTicketScreen() {
       </View>
     </ScrollView>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "New support ticket",
+    description: "Open a private support ticket with TachiReel.",
+    path: "/support/new",
+  });
 }

@@ -1,13 +1,14 @@
 import { useEffect, useState, type PropsWithChildren } from 'react';
 import { Animated, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { usePathname, useRouter, useSegments, type Href } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TachiReelMark, TachiReelWordmark } from './Brand';
 import {
   Avatar,
   Badge,
   Dropdown,
+  FadeIn,
   IconButton,
   PressableScale,
   SearchField,
@@ -18,12 +19,12 @@ import {
 import { getSearchSuggestions, type SearchSuggestion } from '../lib/search';
 import { readPreference, readPreferenceSync, writePreference } from '../lib/storage';
 import { useSession } from '../lib/session';
-import { useTheme } from '../theme/theme';
+import { surfaceTransition, useTheme } from '../theme/theme';
 
 type NavItem = { label: string; icon: IconName; href: Href };
 
 const NAV: NavItem[] = [
-  { label: 'Home', icon: 'home', href: '/(tabs)' },
+  { label: 'Home', icon: 'home', href: '/(tabs)/home' },
   { label: 'Explore', icon: 'compass', href: '/(tabs)/discover' },
   { label: 'Reelyx', icon: 'film', href: '/(tabs)/reelyx' },
   { label: 'Create', icon: 'plus-circle', href: '/(tabs)/create' },
@@ -35,7 +36,7 @@ const NAV: NavItem[] = [
 ];
 
 const MOBILE_NAV: NavItem[] = [
-  { label: 'Home', icon: 'home', href: '/(tabs)' },
+  { label: 'Home', icon: 'home', href: '/(tabs)/home' },
   { label: 'Explore', icon: 'compass', href: '/(tabs)/discover' },
   { label: 'Create', icon: 'plus', href: '/(tabs)/create' },
   { label: 'Reelyx', icon: 'film', href: '/(tabs)/reelyx' },
@@ -49,7 +50,7 @@ function useActiveRoute() {
   const pathname = usePathname();
   const segments = useSegments();
   return (href: Href): boolean => {
-    if (href === '/(tabs)') return pathname === '/' && (segments as string[]).includes('(tabs)');
+    if (href === '/(tabs)/home') return pathname === '/home' && (segments as string[]).includes('(tabs)');
     const path = String(href).replace('/(tabs)', '');
     return pathname === path || pathname.startsWith(`${path}/`);
   };
@@ -191,6 +192,9 @@ function Sidebar({ collapsed, onToggleCollapse }: { collapsed: boolean; onToggle
                     flexDirection: 'row',
                     gap: 12,
                     backgroundColor: active ? colors.navActive : 'transparent',
+                    borderWidth: 1,
+                    borderColor: 'transparent',
+                    ...surfaceTransition(),
                   }}
                 >
                   <Feather name={item.icon} size={19} color={active ? colors.accent : colors.muted} />
@@ -385,11 +389,16 @@ function TopNav({ compact }: { compact: boolean }) {
   };
 
   const suggestionsView = suggestionsOpen && query.trim().length > 0 ? (
-    <View
-      style={[
-        { position: 'absolute', top: compact ? 50 : 54, left: 0, right: 0, maxHeight: 360, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.line, borderRadius: radii.card, padding: 6, zIndex: 45 },
-      ]}
-    >
+    <FadeIn style={{ position: 'absolute', top: compact ? 50 : 54, left: 0, right: 0, maxHeight: 360, zIndex: 45 }}>
+      <View
+        style={{
+          backgroundColor: colors.surfaceRaised,
+          borderWidth: 1,
+          borderColor: colors.line,
+          borderRadius: radii.card,
+          padding: 6,
+        }}
+      >
       {searching && suggestions.length === 0 ? (
         <Text style={[type.small, { color: colors.muted, padding: 12 }]}>Looking for moments…</Text>
       ) : suggestions.length === 0 ? (
@@ -428,7 +437,8 @@ function TopNav({ compact }: { compact: boolean }) {
           ))}
         </ScrollView>
       )}
-    </View>
+      </View>
+    </FadeIn>
   ) : null;
 
   const searchField = (
@@ -477,7 +487,7 @@ function TopNav({ compact }: { compact: boolean }) {
         }}
       >
         {compact ? (
-          <Pressable onPress={() => router.push('/(tabs)')} accessibilityLabel="TachiReel home" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Pressable onPress={() => router.push('/(tabs)/home')} accessibilityLabel="TachiReel home" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <TachiReelMark size={32} />
             <TachiReelWordmark size={21} />
           </Pressable>

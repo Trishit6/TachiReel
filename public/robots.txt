@@ -1,0 +1,24 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /auth
+Disallow: /reset-password
+Disallow: /guardian-consent
+Disallow: /guardian-pending
+Disallow: /home
+Disallow: /create
+Disallow: /inbox
+Disallow: /chat
+Disallow: /notifications
+Disallow: /profile
+Disallow: /edit-profile
+Disallow: /settings
+Disallow: /support/chat
+Disallow: /support/new
+Disallow: /support/tickets
+Disallow: /comments
+Disallow: /post
+Disallow: /user
+Disallow: /reels
+
+Sitemap: http://localhost:8081/sitemap.xml

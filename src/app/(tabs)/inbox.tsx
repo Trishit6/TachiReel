@@ -1,3 +1,4 @@
+import { privatePageMetadata } from '../../lib/seo';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Pressable,
@@ -8,7 +9,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { Avatar, ClayButton, ClayCard, ClayInput, Dialog, EmptyState, ErrorState, LoadingState, PageHeader, SearchField } from '../../components/ui';
 import { ChatWindow } from '../../components/ChatWindow';
 import { DEMO_CONVERSATIONS, DEMO_PEOPLE, isDemoMode } from '../../lib/demo-data';
@@ -386,4 +387,12 @@ function ComposeDialog({
       {isDemoMode ? <Text style={[type.small, { color: colors.mutedLight, fontSize: 9 }]}>Preview mode: conversations are local to this session.</Text> : null}
     </Dialog>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Inbox",
+    description: "Your private TachiReel conversations.",
+    path: "/inbox",
+  });
 }

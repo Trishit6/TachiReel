@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Platform, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { ClayCard } from './ClayCard';
 import { Avatar, ClayButton, ClayInput, Chip, Dialog, Notice, PressableScale, type IconName } from './ui';
 import { formatRelativeTime } from '../lib/format';
@@ -96,7 +96,7 @@ export function PostCard({
   };
 
   return (
-    <ClayCard style={{ overflow: 'hidden' }} padding={0}>
+    <ClayCard style={{ overflow: 'hidden' }} padding={0} interactive>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 16, paddingTop: 15, paddingBottom: 13 }}>
         <Pressable onPress={onAuthor} disabled={!onAuthor} accessibilityLabel={`Open ${authorName}'s profile`}>
           <Avatar uri={post.author?.avatar_url} name={authorName} size={42} ring />

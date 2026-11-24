@@ -13,9 +13,10 @@ import {
   useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { useColorScheme } from 'react-native';
+import { Easing, Platform, useColorScheme, type ViewStyle } from 'react-native';
 import { readPreferenceSync } from '../lib/storage';
 import { dark, light, handwritten } from './colors';
 
@@ -168,6 +169,31 @@ function readSavedMode(): ThemeMode {
   return 'system';
 }
 
+// useSyncExternalStore keeps the first client render identical to the static
+// HTML (light/system), then applies the saved preference immediately after
+// hydration. This avoids a React hydration mismatch for dark-mode visitors.
+let currentMode: ThemeMode | undefined;
+const themeListeners = new Set<() => void>();
+
+function subscribeThemeMode(listener: () => void): () => void {
+  themeListeners.add(listener);
+  return () => themeListeners.delete(listener);
+}
+
+function getThemeModeSnapshot(): ThemeMode {
+  if (currentMode === undefined) currentMode = readSavedMode();
+  return currentMode;
+}
+
+function getThemeModeServerSnapshot(): ThemeMode {
+  return 'system';
+}
+
+function setThemeModeSnapshot(mode: ThemeMode): void {
+  currentMode = mode;
+  themeListeners.forEach((listener) => listener());
+}
+
 function systemPrefersDark(): boolean {
   if (typeof window === 'undefined' || !window.matchMedia) return false;
   try {
@@ -199,6 +225,7 @@ type ThemeValue = {
   shadows: any;
   radii: any;
   spacing: typeof spacing;
+  motion: typeof motion;
   reduceMotion: boolean;
   handwritten: typeof handwritten;
   toggleTheme: () => void;
@@ -220,12 +247,43 @@ const shadows = {
 
 const radii = { xs: 8, sm: 10, md: 14, lg: 20, xl: 28, input: 14, pill: 999, control: 12, card: 18, floating: 20 } as const;
 
+/**
+ * One motion vocabulary for the whole app. Timings are deliberately tiered so
+ * a button tap never feels as slow as a dialog, and every curve is the same
+ * gentle ease-out. Native animations use `easing`; the web layer uses
+ * `cssEasing` so hover/colour transitions match the Animated ones exactly.
+ */
+const motion = {
+  duration: {
+    instant: 120,
+    fast: 160,
+    standard: 220,
+    panel: 280,
+    page: 300,
+  },
+  easing: Easing.bezier(0.22, 1, 0.36, 1),
+  cssEasing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+} as const;
+
+/** CSS transition metadata for surfaces whose colour/border changes on hover. */
+export function surfaceTransition(duration = motion.duration.fast): ViewStyle | undefined {
+  if (Platform.OS !== 'web') return undefined;
+  // ThemeProvider re-renders the tree on preference changes, so checking the
+  // same media query here keeps CSS transitions aligned with Animated ones.
+  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined;
+  return {
+    transitionProperty: 'background-color, border-color, color, opacity, box-shadow',
+    transitionDuration: `${duration}ms`,
+    transitionTimingFunction: motion.cssEasing,
+  } as unknown as ViewStyle;
+}
+
 const ThemeContext = createContext<ThemeValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const colorScheme = useColorScheme();
-  const [mode, setModeState] = useState<ThemeMode>(readSavedMode);
-  const [reduceMotion, setReduceMotion] = useState(systemPrefersReducedMotion);
+  const mode = useSyncExternalStore(subscribeThemeMode, getThemeModeSnapshot, getThemeModeServerSnapshot);
+  const [reduceMotion, setReduceMotion] = useState(false);
 
   const resolved: 'light' | 'dark' =
     mode === 'system' ? (colorScheme === 'dark' || (colorScheme == null && systemPrefersDark()) ? 'dark' : 'light') : mode;
@@ -235,7 +293,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) return;
     const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const update = () => setReduceMotion(query.matches);
+    const update = () => setReduceMotion(systemPrefersReducedMotion());
     update();
     query.addEventListener('change', update);
     return () => query.removeEventListener('change', update);
@@ -253,7 +311,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [colors.background, colors.ink, resolved]);
 
   const setMode = useCallback((nextMode: ThemeMode) => {
-    setModeState(nextMode);
+    setThemeModeSnapshot(nextMode);
     if (typeof window === 'undefined') return;
     try {
       window.localStorage.setItem(THEME_KEY, nextMode);
@@ -276,6 +334,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       shadows,
       radii,
       spacing,
+      motion,
       reduceMotion,
       handwritten,
       toggleTheme,

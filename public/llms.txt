@@ -1,0 +1,27 @@
+# TachiReel
+
+> TachiReel is a gentle photo and short-video social app for sharing everyday moments with a small circle. Public help content is available without an account.
+
+## Public pages
+
+- [Home](http://localhost:8081/): Product overview, safety posture, and getting started calls to action.
+- [Help & Support](http://localhost:8081/support): Searchable help centre with articles about posts, Reelyx, privacy, teen safety, messages, attachments and voice support.
+
+## Help articles
+
+- [Getting started](http://localhost:8081/support/articles/getting-started)
+- [Community guidelines](http://localhost:8081/support/articles/community-guidelines)
+- [Post review](http://localhost:8081/support/articles/post-review)
+- [Reelyx](http://localhost:8081/support/articles/reelyx)
+- [Privacy](http://localhost:8081/support/articles/privacy)
+- [Teen safety](http://localhost:8081/support/articles/teen-safety)
+- [Messages](http://localhost:8081/support/articles/messages)
+- [Attachments](http://localhost:8081/support/articles/attachments)
+- [Voice support](http://localhost:8081/support/articles/voice-support)
+
+## Discovery
+
+- Sitemap: http://localhost:8081/sitemap.xml
+- Robots: http://localhost:8081/robots.txt
+
+Private feeds, conversations, guardian consent links and the admin workspace are intentionally excluded from indexes.

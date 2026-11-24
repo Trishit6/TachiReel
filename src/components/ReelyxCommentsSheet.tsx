@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import { Animated, Modal, PanResponder, Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar, ClayButton, ClayInput } from './ui';
 import { useTheme } from '../theme/theme';
@@ -186,10 +186,10 @@ export function ReelyxCommentsSheet({ visible, video, onClose, onCommentAdded }:
             </View>
           </View>
 
-          <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ padding: 18, gap: 16, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+          <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ padding: 18, gap: 14, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
             {loading ? <Text style={[type.small, { color: colors.muted }]}>Loading comments…</Text> : null}
             {!loading && comments.length === 0 ? (
-              <View style={{ alignItems: 'center', paddingVertical: 28, gap: 8 }}>
+              <View style={{ alignItems: 'center', paddingVertical: 20, gap: 8 }}>
                 <Feather name="message-circle" size={28} color={colors.mutedLight} />
                 <Text style={[type.body, { color: colors.ink }]}>Start the conversation.</Text>
                 <Text style={[type.small, { color: colors.muted, textAlign: 'center' }]}>Be kind, specific and curious.</Text>

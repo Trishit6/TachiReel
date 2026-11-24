@@ -1,6 +1,8 @@
+import { privatePageMetadata } from '../../../lib/seo';
 import { useCallback, useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { SemanticHeading } from '../../../components/SemanticHeading';
 import { ClayCard, ErrorState, LoadingState } from '../../../components/ui';
 import { ChatWindow } from '../../../components/ChatWindow';
 import { DEMO_CONVERSATIONS, isDemoMode } from '../../../lib/demo-data';
@@ -92,16 +94,20 @@ export default function ChatScreen() {
     <View style={{ flex: 1, backgroundColor: colors.background, padding: 0 }}>
       <View style={{ width: '100%', maxWidth: 980, alignSelf: 'center', flex: 1, minHeight: 0 }}>
         {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center' }}><LoadingState label="Opening your conversation…" /></View>
+          <View style={{ flex: 1, justifyContent: 'center', gap: 12 }}>
+            <SemanticHeading style={[type.h3, { color: colors.ink, textAlign: 'center' }]}>Conversation</SemanticHeading>
+            <LoadingState label="Opening your conversation…" />
+          </View>
         ) : error ? (
-          <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
+          <View style={{ flex: 1, justifyContent: 'center', padding: 20, gap: 12 }}>
+            <SemanticHeading style={[type.h3, { color: colors.ink, textAlign: 'center' }]}>Conversation unavailable</SemanticHeading>
             <ClayCard style={{ padding: 12 }}>
               <ErrorState message={error} onRetry={back} />
             </ClayCard>
           </View>
         ) : !conversation ? (
           <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
-            <Text style={[type.body, { color: colors.muted, textAlign: 'center' }]}>This conversation could not be found.</Text>
+            <SemanticHeading style={[type.h3, { color: colors.muted, textAlign: 'center' }]}>This conversation could not be found.</SemanticHeading>
           </View>
         ) : (
           <ChatWindow
@@ -116,4 +122,16 @@ export default function ChatScreen() {
       </View>
     </View>
   );
+}
+
+export function generateMetadata() {
+  return privatePageMetadata({
+    title: "Conversation",
+    description: "View a private TachiReel conversation.",
+    path: "/chat/[id]",
+  });
+}
+
+export function generateStaticParams() {
+  return [];
 }
