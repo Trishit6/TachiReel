@@ -66,6 +66,55 @@ export async function writePreference(key: string, value: string): Promise<void>
   }
 }
 
+// Supabase Auth must not use the web SecureStore shim: it has no browser
+// implementation. Native keeps Keychain/Keystore; web uses localStorage.
+export const authStorage = {
+  getItem: async (key: string): Promise<string | null> => {
+    if (Platform.OS === 'web') {
+      try {
+        return typeof localStorage === 'undefined' ? null : localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    }
+    try {
+      return await SecureStore.getItemAsync(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      try {
+        if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+      } catch {
+        // Private browsing can reject writes; sign-in will still work in memory.
+      }
+      return;
+    }
+    try {
+      await SecureStore.setItemAsync(key, value);
+    } catch {
+      // Ignore unsupported storage; the SDK still keeps the session in memory.
+    }
+  },
+  removeItem: async (key: string): Promise<void> => {
+    if (Platform.OS === 'web') {
+      try {
+        if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
+      } catch {
+        // Nothing to remove when storage is unavailable.
+      }
+      return;
+    }
+    try {
+      await SecureStore.deleteItemAsync(key);
+    } catch {
+      // Ignore unsupported storage.
+    }
+  },
+};
+
 export function readPreferenceSync(key: string): string | null {
   if (Platform.OS !== 'web') return null;
   try {

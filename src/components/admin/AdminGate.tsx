@@ -10,9 +10,12 @@ import { useTheme } from '../../theme/theme';
 
 export function AdminGate({ children }: { children: ReactNode }) {
   const { loading, access, error } = useAdmin();
-  const { signOut, isDemo, userId, loading: sessionLoading } = useSession();
+  const { signOut, isDemo, userId, profile, loading: sessionLoading } = useSession();
   const { colors, type } = useTheme();
   const unauthenticated = !sessionLoading && !userId && !isDemo;
+  // Server RPCs already deny staff access for suspended accounts; reflect the
+  // same rule in the gate so the shell never opens for one.
+  const accountInactive = Boolean(userId && profile && profile.account_status !== 'active');
 
   useEffect(() => {
     if (!loading && !access && unauthenticated) router.replace('/admin/login');
@@ -38,7 +41,7 @@ export function AdminGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!access) {
+  if (!access || accountInactive) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <SemanticHeading visuallyHidden>Admin workspace</SemanticHeading>
@@ -48,9 +51,11 @@ export function AdminGate({ children }: { children: ReactNode }) {
           title="Admin workspace unavailable"
           description={
             error ??
-            (isDemo
-              ? 'Preview mode does not grant administrator privileges. Connect Supabase and sign in with an assigned staff account.'
-              : 'This account does not have an active administrator role.')
+            (accountInactive
+              ? 'This account is not active. Contact a Super Admin if you believe this is a mistake.'
+              : isDemo
+                ? 'Preview mode does not grant administrator privileges. Connect Supabase and sign in with an assigned staff account.'
+                : 'This account does not have an active administrator role.')
           }
           action={
             <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>

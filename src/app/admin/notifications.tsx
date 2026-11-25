@@ -1,7 +1,7 @@
 import { adminPageMetadata } from '../../lib/seo';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { Avatar, ClayButton, ClayInput, Dialog, Dropdown, ModalCard, SearchField, Select, Tabs, useToast } from '../../components/ui';
+import { Avatar, ClayButton, ClayInput, Dialog, Dropdown, ModalCard, SearchField, Select, Tabs, useToast, type DropdownItem } from '../../components/ui';
 import { useAdmin } from '../../components/admin/AdminProvider';
 import {
   AdminCard,
@@ -9,6 +9,7 @@ import {
   AdminRestricted,
   DataTable,
   FilterRow,
+  KeyValue,
   LoadingCard,
   Pagination,
   StatCard,
@@ -21,6 +22,7 @@ import {
   titleCase,
   truncate,
   type AdminNotification,
+  type AdminNotificationDetail,
   type AdminTemplate,
   type AdminUser,
 } from '../../lib/admin';
@@ -40,6 +42,7 @@ export default function AdminNotificationsScreen() {
   const [templates, setTemplates] = useState<AdminTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [templateError, setTemplateError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AdminNotification | null>(null);
@@ -53,7 +56,12 @@ export default function AdminNotificationsScreen() {
   const [sendNow, setSendNow] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [userResults, setUserResults] = useState<AdminUser[]>([]);
+  const [userSearchError, setUserSearchError] = useState<string | null>(null);
   const [selectedUsers, setSelectedUsers] = useState<AdminUser[]>([]);
+
+  const [detail, setDetail] = useState<AdminNotificationDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
 
   const [editingTemplate, setEditingTemplate] = useState<AdminTemplate | null>(null);
   const [templateKeyInput, setTemplateKeyInput] = useState('');
@@ -78,13 +86,17 @@ export default function AdminNotificationsScreen() {
   }, [page]);
 
   const loadTemplates = useCallback(async () => {
+    setTemplateError(null);
     try {
       const result = await adminApi.listTemplates();
       setTemplates(result.items ?? []);
-    } catch {
+    } catch (caught) {
+      const message = friendlyError(caught);
+      setTemplateError(message);
       setTemplates([]);
+      toast.show(`Could not load templates: ${message}`, 'error');
     }
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -99,11 +111,12 @@ export default function AdminNotificationsScreen() {
     const timer = setTimeout(() => {
       if (!userSearch.trim()) {
         setUserResults([]);
+        setUserSearchError(null);
         return;
       }
       void adminApi.listUsers({ p_search: userSearch.trim(), p_limit: 8, p_offset: 0 })
-        .then((result) => setUserResults(result.items ?? []))
-        .catch(() => setUserResults([]));
+        .then((result) => { setUserResults(result.items ?? []); setUserSearchError(null); })
+        .catch((caught) => { setUserResults([]); setUserSearchError(friendlyError(caught)); });
     }, 350);
     return () => clearTimeout(timer);
   }, [composerOpen, userSearch]);
@@ -111,7 +124,23 @@ export default function AdminNotificationsScreen() {
   const openComposer = () => {
     setTitle(''); setBody(''); setNotificationType('general'); setAudience('all');
     setTemplateKey(''); setSendNow(false); setSelectedUsers([]); setUserSearch('');
+    setUserSearchError(null);
     setComposerOpen(true);
+  };
+
+  const openDetail = async (row: AdminNotification) => {
+    setDetailLoading(true);
+    setDetail(null);
+    setDetailError(null);
+    try {
+      setDetail(await adminApi.getNotification(row.id));
+    } catch (caught) {
+      const message = friendlyError(caught);
+      setDetailError(message);
+      toast.show(message, 'error');
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   const applyTemplate = (key: string) => {
@@ -127,6 +156,10 @@ export default function AdminNotificationsScreen() {
     }
     if (audience === 'selected' && selectedUsers.length === 0) {
       toast.show('Select at least one recipient.', 'error');
+      return;
+    }
+    if (sendNow && !(can('notifications.manage') && can('notifications.send'))) {
+      toast.show('Sending announcements requires the notifications.send permission.', 'error');
       return;
     }
     setSaving(true);
@@ -226,13 +259,16 @@ export default function AdminNotificationsScreen() {
 
   if (!can('notifications.view')) return <AdminRestricted permission="notifications.view" />;
 
+  const canManageNotifications = can('notifications.manage');
+  const canCreateNotifications = canManageNotifications && can('notifications.create');
+  const canSendNotifications = canManageNotifications && can('notifications.send');
   const sent = rows.filter((item) => item.status === 'sent').length;
 
   return (
     <AdminPage
       title="Notifications"
       subtitle="Send in-app announcements and maintain reusable message templates."
-      actions={can('notifications.manage') ? (
+      actions={canCreateNotifications ? (
         <ClayButton label="New announcement" size="sm" icon="plus" onPress={openComposer} />
       ) : undefined}
     >
@@ -271,16 +307,23 @@ export default function AdminNotificationsScreen() {
                   { key: 'created', label: 'Created', width: 160, render: (row) => <Text style={[type.small, { color: colors.muted }]}>{formatDateTime(row.created_at)}</Text> },
                   {
                     key: 'actions', label: 'Actions', width: 110,
-                    render: (row) => can('notifications.manage') ? (
-                      <Dropdown label="Announcement actions" items={[
-                        ...(row.status !== 'sent' ? [{ key: 'send', label: 'Send now', icon: 'send' as const, onPress: () => void sendNotification(row) }] : []),
-                        { key: 'delete', label: 'Delete', icon: 'trash-2' as const, tone: 'danger' as const, onPress: () => setDeleteTarget(row) },
-                      ]} />
-                    ) : <Text style={[type.small, { color: colors.muted }]}>View only</Text>,
+                    render: (row) => {
+                      const items: DropdownItem[] = [
+                        { key: 'details', label: 'View delivery details', icon: 'eye', onPress: () => void openDetail(row) },
+                      ];
+                      if (canSendNotifications && row.status !== 'sent') {
+                        items.push({ key: 'send', label: 'Send now', icon: 'send', onPress: () => void sendNotification(row) });
+                      }
+                      if (canManageNotifications) {
+                        items.push({ key: 'delete', label: 'Delete', icon: 'trash-2', tone: 'danger', onPress: () => setDeleteTarget(row) });
+                      }
+                      return <Dropdown label="Announcement actions" items={items} />;
+                    },
                   },
                 ]}
                 rows={rows}
                 rowKey={(row) => row.id}
+                onRowPress={(row) => void openDetail(row)}
                 emptyTitle="No announcements yet"
                 emptyDescription="Create your first announcement with the button above."
               />
@@ -290,17 +333,18 @@ export default function AdminNotificationsScreen() {
         </>
       ) : (
         <AdminCard>
-          {can('notifications.manage') ? (
+          {canManageNotifications ? (
             <ClayButton label="New template" size="sm" icon="plus" onPress={() => openTemplateEditor(null)} />
           ) : null}
-          {templates.length === 0 ? <Text style={[type.small, { color: colors.muted }]}>No templates saved.</Text> : null}
+          {templateError ? <Text style={[type.body, { color: colors.danger }]}>{templateError}</Text> : null}
+          {!templateError && templates.length === 0 ? <Text style={[type.small, { color: colors.muted }]}>No templates saved.</Text> : null}
           {templates.map((template) => (
             <View key={template.key} style={{ borderBottomWidth: 1, borderBottomColor: colors.line, paddingVertical: 12, gap: 5 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                 <Text style={[type.smallMedium, { color: colors.ink }]}>{template.title}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <StatusBadge status={template.type} />
-                  {can('notifications.manage') ? (
+                  {canManageNotifications ? (
                     <Dropdown label={`Template ${template.key}`} items={[
                       { key: 'edit', label: 'Edit', icon: 'edit-3', onPress: () => openTemplateEditor(template) },
                       { key: 'delete', label: 'Delete', icon: 'trash-2', tone: 'danger', onPress: () => void deleteTemplate(template) },
@@ -337,12 +381,14 @@ export default function AdminNotificationsScreen() {
                 <Select label="Audience" value={audience} options={[{ label: 'Everyone', value: 'all' }, { label: 'Selected users', value: 'selected' }]} onValueChange={setAudience} />
               </View>
               <View style={{ width: 180 }}>
-                <Select label="When" value={sendNow ? 'now' : 'draft'} options={[{ label: 'Save as draft', value: 'draft' }, { label: 'Send now', value: 'now' }]} onValueChange={(next) => setSendNow(next === 'now')} />
+                <Select label="When" value={canSendNotifications && sendNow ? 'now' : 'draft'} options={canSendNotifications ? [{ label: 'Save as draft', value: 'draft' }, { label: 'Send now', value: 'now' }] : [{ label: 'Save as draft', value: 'draft' }]} onValueChange={(next) => setSendNow(next === 'now')} />
               </View>
             </FilterRow>
             {audience === 'selected' ? (
               <View style={{ gap: 10 }}>
                 <SearchField value={userSearch} onChangeText={setUserSearch} placeholder="Search accounts to add recipients" compact />
+                {userSearchError ? <Text style={[type.small, { color: colors.danger }]}>{userSearchError}</Text> : null}
+                {userSearch.trim() && !userSearchError && userResults.length === 0 ? <Text style={[type.small, { color: colors.muted }]}>No matching accounts.</Text> : null}
                 {selectedUsers.length ? (
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                     {selectedUsers.map((user) => (
@@ -382,6 +428,49 @@ export default function AdminNotificationsScreen() {
           <Select label="Type" value={templateType} options={TYPES.map((item) => ({ label: titleCase(item), value: item }))} onValueChange={setTemplateType} />
           <ClayButton label="Save template" icon="save" loading={saving} onPress={() => void saveTemplate()} />
         </View>
+      </ModalCard>
+
+      <ModalCard visible={detailLoading || Boolean(detail) || Boolean(detailError)} onClose={() => { setDetail(null); setDetailError(null); }} width={720}>
+        {detailLoading ? <LoadingCard label="Loading delivery details" /> : null}
+        {!detailLoading && detailError ? <AdminCard><Text style={[type.body, { color: colors.danger }]}>{detailError}</Text></AdminCard> : null}
+        {detail ? (
+          <ScrollView style={{ maxHeight: '84%' }} showsVerticalScrollIndicator>
+            <View style={{ gap: 12 }}>
+              <View>
+                <Text style={[type.h3, { color: colors.ink }]}>{detail.notification.title}</Text>
+                <Text style={[type.small, { color: colors.muted }]}>{truncate(detail.notification.body, 220)}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                <StatCard label="Audience" value={titleCase(detail.notification.audience)} icon="users" />
+                <StatCard label="Recipients" value={detail.delivery.recipient_count} icon="bell" />
+                <StatCard label="Delivered" value={detail.delivery.delivered_count} icon="check-circle" />
+                <StatCard label="Read" value={detail.delivery.read_count} icon="eye" />
+              </View>
+              <KeyValue label="Status" value={<StatusBadge status={detail.notification.status} />} />
+              <KeyValue label="Created" value={formatDateTime(detail.notification.created_at)} />
+              <KeyValue label="Sent" value={detail.notification.sent_at ? formatDateTime(detail.notification.sent_at) : 'Not sent'} />
+              <Text style={[type.tiny, { color: colors.muted }]}>RECENT DELIVERY</Text>
+              {detail.delivery.recent.length === 0 ? <Text style={[type.small, { color: colors.muted }]}>No deliveries recorded yet.</Text> : null}
+              {detail.delivery.recent.map((recipient, index) => (
+                <View key={`${recipient.username}-${index}`} style={{ borderBottomWidth: 1, borderBottomColor: colors.line, paddingVertical: 8 }}>
+                  <Text style={[type.smallMedium, { color: colors.ink }]}>@{recipient.username ?? 'unknown'}</Text>
+                  <Text style={[type.tiny, { color: colors.muted }]}>Delivered {formatDateTime(recipient.delivered_at)} · {recipient.read_at ? `Read ${formatDateTime(recipient.read_at)}` : 'Unread'}</Text>
+                </View>
+              ))}
+              <Text style={[type.tiny, { color: colors.muted }]}>ACTIVITY HISTORY</Text>
+              {detail.history.length === 0 ? <Text style={[type.small, { color: colors.muted }]}>No staff actions recorded.</Text> : null}
+              {detail.history.map((entry, index) => (
+                <View key={`${entry.action}-${entry.created_at}-${index}`} style={{ borderBottomWidth: 1, borderBottomColor: colors.line, paddingVertical: 8, gap: 3 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+                    <Text style={[type.smallMedium, { color: colors.ink }]}>{titleCase(entry.action)}</Text>
+                    <Text style={[type.tiny, { color: colors.muted }]}>{formatDateTime(entry.created_at)}</Text>
+                  </View>
+                  {entry.actor_username || entry.actor ? <Text style={[type.tiny, { color: colors.muted }]}>By @{entry.actor_username ?? entry.actor}</Text> : null}
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        ) : null}
       </ModalCard>
 
       <Dialog

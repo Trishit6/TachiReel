@@ -69,6 +69,8 @@ export default function AdminAdministratorsScreen() {
   const [pickedUser, setPickedUser] = useState<AdminUser | null>(null);
   const [pickedRole, setPickedRole] = useState<string>('moderator');
   const [roleDefs, setRoleDefs] = useState<AdminRoleDefinition[]>([]);
+  const [roleError, setRoleError] = useState<string | null>(null);
+  const [userSearchError, setUserSearchError] = useState<string | null>(null);
   const [accessTarget, setAccessTarget] = useState<AdminAccount | null>(null);
   const [accessDraft, setAccessDraft] = useState<{ customRole: string | null; extra: AdminPermission[] }>({
     customRole: null,
@@ -97,25 +99,34 @@ export default function AdminAdministratorsScreen() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      void adminApi.listRoles().then((result) => setRoleDefs(result.roles ?? [])).catch(() => setRoleDefs([]));
+      void adminApi.listRoles()
+        .then((result) => { setRoleDefs(result.roles ?? []); setRoleError(null); })
+        .catch((caught) => {
+          const message = friendlyError(caught);
+          setRoleError(message);
+          setRoleDefs([]);
+          toast.show(`Could not load roles: ${message}`, 'error');
+        });
     }, 0);
     return () => clearTimeout(timer);
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       if (editor?.mode !== 'create' || !userSearch.trim()) {
         setUserResults([]);
+        setUserSearchError(null);
         return;
       }
       void adminApi
         .listUsers({ p_search: userSearch.trim(), p_limit: 10, p_offset: 0 })
-        .then((result) =>
+        .then((result) => {
           setUserResults(
             (result.items ?? []).filter((user) => !accounts.some((account) => account.user_id === user.id)),
-          ),
-        )
-        .catch(() => setUserResults([]));
+          );
+          setUserSearchError(null);
+        })
+        .catch((caught) => { setUserResults([]); setUserSearchError(friendlyError(caught)); });
     }, 350);
     return () => clearTimeout(timer);
   }, [accounts, editor, userSearch]);
@@ -136,6 +147,7 @@ export default function AdminAdministratorsScreen() {
   const openCreate = () => {
     setUserSearch('');
     setUserResults([]);
+    setUserSearchError(null);
     setPickedUser(null);
     setPickedRole('moderator');
     setEditor({ mode: 'create' });
@@ -151,6 +163,10 @@ export default function AdminAdministratorsScreen() {
     const userId = editor.mode === 'create' ? pickedUser?.id : editor.account.user_id;
     if (!userId) {
       toast.show('Choose an account first.', 'error');
+      return;
+    }
+    if (pickedRole === 'super_admin' && !can('admin.manage')) {
+      toast.show('Only a Super Admin can grant Super Admin access.', 'error');
       return;
     }
     if (editor.mode === 'role' && userId === access?.user_id) {
@@ -224,8 +240,13 @@ export default function AdminAdministratorsScreen() {
     }
   };
 
-  if (!can('admin.manage')) return <AdminRestricted permission="admin.manage" />;
+  if (!can('admins.view') && !can('admin.manage')) return <AdminRestricted permission="admins.view" />;
 
+  const canCreateAdmin = can('admin.manage') || can('admins.create');
+  const canEditAdmin = can('admin.manage') || can('admins.edit');
+  const canDeactivateAdmin = can('admin.manage') || can('admins.deactivate');
+  const canAssignPermissions = can('admin.manage') || can('permissions.assign');
+  const assignableRoleOptions = ROLE_OPTIONS.filter((role) => role.value !== 'super_admin' || can('admin.manage'));
   const activeCount = accounts.filter((account) => account.is_active).length;
   const superCount = accounts.filter((account) => account.role === 'super_admin' && account.is_active).length;
 
@@ -233,7 +254,7 @@ export default function AdminAdministratorsScreen() {
     <AdminPage
       title="Administrators"
       subtitle="Grant staff access from existing accounts. Roles are stored and verified in Postgres; this page never creates its own login."
-      actions={<ClayButton label="Add administrator" size="sm" icon="plus" onPress={openCreate} />}
+      actions={canCreateAdmin ? <ClayButton label="Add administrator" size="sm" icon="plus" onPress={openCreate} /> : undefined}
     >
       <AdminCard>
         <FilterRow>
@@ -308,6 +329,7 @@ export default function AdminAdministratorsScreen() {
                     {row.custom_role ? (
                       <Text style={[type.tiny, { color: colors.muted }]} numberOfLines={1}>+ {titleCase(row.custom_role)}</Text>
                     ) : null}
+                    {row.is_protected ? <Text style={[type.tiny, { color: colors.muted }]}>Protected bootstrap account</Text> : null}
                   </View>
                 ),
               },
@@ -341,16 +363,19 @@ export default function AdminAdministratorsScreen() {
                 width: 300,
                 render: (row) => {
                   const self = row.user_id === access?.user_id;
+                  const protectedAccount = Boolean(row.is_protected);
+                  const lastActiveSuper = row.role === 'super_admin' && row.is_active && superCount <= 1;
+                  const locked = self || protectedAccount;
                   return (
                     <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                      <ClayButton label="Access" size="sm" variant="outline" disabled={self} onPress={() => openAccess(row)} />
-                      <ClayButton label="Role" size="sm" variant="outline" disabled={self} onPress={() => openRole(row)} />
+                      <ClayButton label="Access" size="sm" variant="outline" disabled={!canAssignPermissions || locked} onPress={() => openAccess(row)} />
+                      <ClayButton label="Role" size="sm" variant="outline" disabled={!canEditAdmin || locked || lastActiveSuper} onPress={() => openRole(row)} />
                       {row.is_active ? (
-                        <ClayButton label="Deactivate" size="sm" variant="danger" disabled={self} onPress={() => setConfirm({ kind: 'deactivate', account: row })} />
+                        <ClayButton label="Deactivate" size="sm" variant="danger" disabled={!canDeactivateAdmin || locked || lastActiveSuper} onPress={() => setConfirm({ kind: 'deactivate', account: row })} />
                       ) : (
-                        <ClayButton label="Reactivate" size="sm" variant="soft" onPress={() => setConfirm({ kind: 'activate', account: row })} />
+                        <ClayButton label="Reactivate" size="sm" variant="soft" disabled={!canDeactivateAdmin || locked} onPress={() => setConfirm({ kind: 'activate', account: row })} />
                       )}
-                      <ClayButton label="Remove" size="sm" variant="ghost" disabled={self} onPress={() => setConfirm({ kind: 'remove', account: row })} />
+                      <ClayButton label="Remove" size="sm" variant="ghost" disabled={!canDeactivateAdmin || locked || (row.role === 'super_admin' && superCount <= 1)} onPress={() => setConfirm({ kind: 'remove', account: row })} />
                       <ClayButton label="Reset" size="sm" variant="ghost" onPress={() => void resetAccess(row)} />
                     </View>
                   );
@@ -389,6 +414,7 @@ export default function AdminAdministratorsScreen() {
             <View>
               <Text style={[type.tiny, { color: colors.muted, marginBottom: 6 }]}>Find account</Text>
               <SearchField value={userSearch} onChangeText={setUserSearch} placeholder="Search by name, username or email" />
+              {userSearchError ? <Text style={[type.small, { color: colors.danger, marginTop: 6 }]}>{userSearchError}</Text> : null}
             </View>
             {pickedUser ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 10 }}>
@@ -428,7 +454,7 @@ export default function AdminAdministratorsScreen() {
           </View>
         ) : null}
 
-        <Select label="Role" value={pickedRole} onValueChange={setPickedRole} options={ROLE_OPTIONS} />
+        <Select label="Role" value={pickedRole} onValueChange={setPickedRole} options={assignableRoleOptions} />
       </Dialog>
 
       <Dialog
@@ -461,6 +487,7 @@ export default function AdminAdministratorsScreen() {
             <Text style={[type.small, { color: colors.muted }]}>
               Extra permissions are additive. A built-in role can never be replaced by hiding it here, and your own access cannot be changed.
             </Text>
+            {roleError ? <Text style={[type.small, { color: colors.danger }]}>{roleError}</Text> : null}
             <Select
               label="Custom role layer"
               value={accessDraft.customRole ?? 'none'}

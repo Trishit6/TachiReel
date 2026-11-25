@@ -103,8 +103,10 @@ export default function AdminDashboardScreen() {
       {data && !loading ? (
         <>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-            <StatCard label="Total users" value={stats.total_users ?? 0} hint={`${formatNumber(stats.new_users ?? 0)} new in range`} icon="users" accent />
-            <StatCard label="Active users" value={stats.active_users ?? 0} hint={`${formatNumber(stats.suspended_accounts ?? 0)} suspended`} icon="user-check" />
+            <StatCard label="Total users" value={stats.total_users ?? 0} icon="users" accent />
+            <StatCard label="New users (range)" value={stats.new_users ?? 0} icon="user-plus" />
+            <StatCard label="Active users" value={stats.active_users ?? 0} icon="user-check" />
+            <StatCard label="Suspended accounts" value={stats.suspended_accounts ?? 0} icon="slash" />
             <StatCard label="Posts" value={stats.total_posts ?? 0} hint={`${formatNumber(stats.pending_content ?? 0)} awaiting review`} icon="image" />
             <StatCard label="Reelyx videos" value={stats.total_reelyx ?? 0} hint="Published videos" icon="video" />
             <StatCard label="Open reports" value={stats.pending_reports ?? 0} hint="Open or reviewing" icon="flag" />

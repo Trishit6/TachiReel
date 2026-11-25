@@ -92,7 +92,7 @@ async function main() {
       { onConflict: 'user_id' },
     );
   if (roleError) {
-    fail(`Could not assign the Super Admin role. Apply supabase/schema.sql and supabase/admin_schema.sql first: ${roleError.message}`);
+    fail(`Could not assign the Super Admin role. Apply schema.sql, admin_schema.sql and admin_rbac_v2.sql first: ${roleError.message}`);
   }
 
   const { data: assigned, error: verifyError } = await supabase

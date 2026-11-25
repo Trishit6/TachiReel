@@ -1,13 +1,14 @@
 import { adminPageMetadata } from '../../lib/seo';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
+import { Href, router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import * as Linking from 'expo-linking';
 import { SemanticHeading } from '../../components/SemanticHeading';
 import { TachiReelMark, TachiReelWordmark } from '../../components/Brand';
 import { ClayButton, ClayCard, ClayInput, IconButton, Notice } from '../../components/ui';
-import { adminApi } from '../../lib/admin';
+import { adminApi, type AdminAccess, type AdminPermission } from '../../lib/admin';
+import { absoluteUrl } from '../../lib/site';
 import { useSession } from '../../lib/session';
 import { isSupabaseConfigured, supabase } from '../../lib/supabase';
 import { brand } from '../../theme/brand';
@@ -16,16 +17,30 @@ import { useTheme } from '../../theme/theme';
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+$/;
 
 function resetRedirect(): string {
-  const base = process.env.EXPO_PUBLIC_APP_URL?.replace(/\/$/, '');
-  if (base) return `${base}/reset-password`;
+  if (process.env.EXPO_PUBLIC_APP_URL?.trim()) return absoluteUrl('/reset-password');
   if (Platform.OS === 'web' && typeof window !== 'undefined') return `${window.location.origin}/reset-password`;
   return Linking.createURL('/reset-password');
+}
+
+// Staff without analytics access must not land on a restricted dashboard.
+const LANDING_ROUTES: { permission: AdminPermission; href: Href }[] = [
+  { permission: 'analytics.view', href: '/admin/dashboard' },
+  { permission: 'tickets.view', href: '/admin/tickets' },
+  { permission: 'reports.view', href: '/admin/reports' },
+  { permission: 'posts.view', href: '/admin/posts' },
+  { permission: 'users.view', href: '/admin/users' },
+  { permission: 'notifications.view', href: '/admin/notifications' },
+  { permission: 'settings.view', href: '/admin/settings' },
+];
+
+function landingRoute(access: AdminAccess): Href {
+  return LANDING_ROUTES.find((route) => access.permissions.includes(route.permission))?.href ?? '/admin/profile';
 }
 
 export default function AdminLoginScreen() {
   const { colors, type, resolved, toggleTheme } = useTheme();
   const { width } = useWindowDimensions();
-  const { refresh } = useSession();
+  const { refresh, userId, loading: sessionLoading } = useSession();
   const compact = width < 720;
 
   const [email, setEmail] = useState('');
@@ -34,6 +49,21 @@ export default function AdminLoginScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // An already-approved admin session should never linger on the sign-in form.
+  useEffect(() => {
+    if (sessionLoading || !userId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [access] = await adminApi.access();
+        if (!cancelled && access?.role) router.replace(landingRoute(access));
+      } catch {
+        // A normal member or an offline client stays on the sign-in form.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionLoading, userId]);
 
   const authenticate = async () => {
     setError(null);
@@ -61,21 +91,28 @@ export default function AdminLoginScreen() {
       if (authError) throw authError;
 
       // Trust only the server-side RPC: it reads the active role from Postgres.
-      const rows = await adminApi.access();
-      const access = Array.isArray(rows) ? rows[0] : (rows as unknown as { role?: string } | undefined);
+      const [access] = await adminApi.access();
       if (!access?.role) {
+        // Do not leave a valid member session behind on a failed admin login.
+        await supabase.auth.signOut({ scope: 'local' });
+        await refresh();
         setError('This account does not have an active administrator role. Ask a Super Admin to assign one.');
         return;
       }
 
+      await adminApi.logAuthEvent('login').catch(() => {
+        // Auditing is best effort; the server still enforces every admin RPC.
+      });
       await refresh();
-      router.replace('/admin/dashboard');
+      router.replace(landingRoute(access));
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : 'Could not sign in.';
+      const message = caught instanceof Error ? caught.message : '';
       setError(
         /invalid login credentials/i.test(message)
           ? 'That email and password combination is not recognised.'
-          : message,
+          : /email not confirmed/i.test(message)
+            ? 'Confirm your email address before signing in.'
+            : 'Could not sign in right now. Check your details and try again.',
       );
     } finally {
       setBusy(false);
@@ -100,8 +137,8 @@ export default function AdminLoginScreen() {
       });
       if (resetError) throw resetError;
       setNotice('If that email belongs to a staff account, a password reset link is on its way.');
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not send a reset link.');
+    } catch {
+      setError('Could not send a reset link right now. Please try again shortly.');
     } finally {
       setBusy(false);
     }

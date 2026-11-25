@@ -3,10 +3,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { SemanticHeading } from '../../components/SemanticHeading';
-import { ClayButton, ClayCard, EmptyState, ErrorState, LoadingState, PageHeader } from '../../components/ui';
+import { ClayButton, ClayCard, EmptyState, ErrorState, LoadingState, PageHeader, useToast } from '../../components/ui';
 import { ProfileView } from '../../components/ProfileView';
 import { DEMO_POSTS, DEMO_PROFILE, isDemoMode } from '../../lib/demo-data';
-import { fetchFeed, fetchSavedPosts, type FeedPost } from '../../lib/posts';
+import { fetchFeed, fetchFollowRequests, fetchSavedPosts, respondToFollowRequest, type FeedPost, type FollowRequest } from '../../lib/posts';
 import { profileLink, shareLink } from '../../lib/share';
 import { useSession } from '../../lib/session';
 import { supabase } from '../../lib/supabase';
@@ -14,9 +14,11 @@ import { useTheme } from '../../theme/theme';
 
 export default function ProfileScreen() {
   const { colors } = useTheme();
+  const { show } = useToast();
   const { userId, profile, loading: sessionLoading } = useSession();
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [saved, setSaved] = useState<FeedPost[]>([]);
+  const [requests, setRequests] = useState<FollowRequest[]>([]);
   const [stats, setStats] = useState({ posts: 0, followers: 0, following: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +42,7 @@ export default function ProfileScreen() {
       });
       setPosts(own.map(toFeed));
       setSaved(DEMO_POSTS.filter((post) => post.saved).map(toFeed));
+      setRequests([]);
       setStats({ posts: own.length, followers: 12800, following: 248 });
       setError(null);
       return;

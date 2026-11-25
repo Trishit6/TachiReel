@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Avatar, Badge, ClayButton, ClayCard, EmptyState, PressableScale } from './ui';
-import type { FeedPost } from '../lib/posts';
+import type { FeedPost, FollowRequest } from '../lib/posts';
 import { useTheme } from '../theme/theme';
 
 export type ProfilePerson = {
@@ -33,6 +33,8 @@ export function ProfileView({
   onSettings,
   onOpenPost,
   onCreate,
+  followRequests = [],
+  onRespondFollowRequest,
   loading = false,
 }: {
   profile: ProfilePerson;
@@ -48,6 +50,8 @@ export function ProfileView({
   onSettings?: () => void;
   onOpenPost: (post: FeedPost) => void;
   onCreate?: () => void;
+  followRequests?: FollowRequest[];
+  onRespondFollowRequest?: (followerId: string, accept: boolean) => void;
   loading?: boolean;
 }) {
   const { colors, type, radii } = useTheme();
@@ -57,7 +61,7 @@ export function ProfileView({
 
   const videoPosts = posts.filter((post) => post.media_type === 'video');
   const shown = tab === 'Posts' ? posts : tab === 'Reels' ? videoPosts : tab === 'Saved' ? savedPosts : [];
-  const tabs: Tab[] = isOwn ? ['Posts', 'Reels', 'Saved', 'Tagged'] : ['Posts', 'Reels', 'Tagged'];
+  const tabs: Tab[] = isOwn ? ['Posts', 'Reels', 'Saved'] : ['Posts', 'Reels'];
 
   return (
     <View style={{ gap: 18 }}>
@@ -137,7 +141,40 @@ export function ProfileView({
         </View>
       </ClayCard>
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderBottomWidth: 1, borderBottomColor: colors.line, paddingBottom: 2, overflow: 'hidden' }}>
+      {isOwn && followRequests.length > 0 ? (
+        <ClayCard style={{ padding: 16 }}>
+          <Text style={[type.h3, { color: colors.ink, marginBottom: 4 }]}>Follow requests</Text>
+          <Text style={[type.small, { color: colors.muted, marginBottom: 12 }]}>
+            Review who can see your followers-only moments.
+          </Text>
+          <View style={{ gap: 10 }}>
+            {followRequests.map((request) => (
+              <View key={request.follower_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Avatar uri={request.avatar_url} name={request.display_name} size={38} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[type.smallMedium, { color: colors.ink }]} numberOfLines={1}>{request.display_name}</Text>
+                  <Text style={[type.tiny, { color: colors.muted }]} numberOfLines={1}>@{request.username}</Text>
+                </View>
+                <ClayButton
+                  label="Accept"
+                  size="sm"
+                  icon="check"
+                  onPress={() => onRespondFollowRequest?.(request.follower_id, true)}
+                />
+                <ClayButton
+                  label="Decline"
+                  size="sm"
+                  variant="ghost"
+                  icon="x"
+                  onPress={() => onRespondFollowRequest?.(request.follower_id, false)}
+                />
+              </View>
+            ))}
+          </View>
+        </ClayCard>
+      ) : null}
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, borderBottomWidth: 1, borderBottomColor: colors.line, paddingBottom: 2 }}>
         {tabs.map((item) => {
           const active = tab === item;
           return (
@@ -149,7 +186,7 @@ export function ProfileView({
               style={{ paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: 2, borderBottomColor: active ? colors.accent : 'transparent', flexDirection: 'row', alignItems: 'center', gap: 6 }}
             >
               <Feather
-                name={item === 'Posts' ? 'grid' : item === 'Reels' ? 'film' : item === 'Saved' ? 'bookmark' : 'tag'}
+                name={item === 'Posts' ? 'grid' : item === 'Reels' ? 'film' : 'bookmark'}
                 size={14}
                 color={active ? colors.accent : colors.muted}
               />
@@ -157,7 +194,7 @@ export function ProfileView({
             </Pressable>
           );
         })}
-      </View>
+      </ScrollView>
 
       {tab === 'Tagged' ? (
         <ClayCard style={{ padding: 8 }}>

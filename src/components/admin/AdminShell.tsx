@@ -15,41 +15,41 @@ type AdminNavItem = {
   label: string;
   href: Href;
   icon: IconName;
-  permission?: AdminPermission;
+  permissions?: AdminPermission[];
 };
 
 const SECTIONS: { title: string; items: AdminNavItem[] }[] = [
   {
     title: 'Overview',
     items: [
-      { label: 'Dashboard', href: '/admin/dashboard', icon: 'grid' },
-      { label: 'Platform Analytics', href: '/admin/analytics', icon: 'bar-chart-2', permission: 'analytics.view' },
+      { label: 'Dashboard', href: '/admin/dashboard', icon: 'grid', permissions: ['analytics.view'] },
+      { label: 'Platform Analytics', href: '/admin/analytics', icon: 'bar-chart-2', permissions: ['analytics.view'] },
     ],
   },
   {
     title: 'Community',
     items: [
-      { label: 'User Management', href: '/admin/users', icon: 'users', permission: 'users.view' },
-      { label: 'Posts Management', href: '/admin/posts', icon: 'image', permission: 'posts.view' },
-      { label: 'Reelyx Management', href: '/admin/reelyx', icon: 'video', permission: 'reelyx.view' },
-      { label: 'Comments Management', href: '/admin/comments', icon: 'message-circle', permission: 'comments.view' },
-      { label: 'Reports & Moderation', href: '/admin/reports', icon: 'flag', permission: 'reports.view' },
+      { label: 'User Management', href: '/admin/users', icon: 'users', permissions: ['users.view'] },
+      { label: 'Posts Management', href: '/admin/posts', icon: 'image', permissions: ['posts.view'] },
+      { label: 'Reelyx Management', href: '/admin/reelyx', icon: 'video', permissions: ['reelyx.view'] },
+      { label: 'Comments Management', href: '/admin/comments', icon: 'message-circle', permissions: ['comments.view'] },
+      { label: 'Reports & Moderation', href: '/admin/reports', icon: 'flag', permissions: ['reports.view'] },
     ],
   },
   {
     title: 'Operations',
     items: [
-      { label: 'Support Tickets', href: '/admin/tickets', icon: 'life-buoy', permission: 'tickets.view' },
-      { label: 'Notifications', href: '/admin/notifications', icon: 'bell', permission: 'notifications.view' },
-      { label: 'Audit Logs', href: '/admin/audit', icon: 'list', permission: 'audit.view' },
+      { label: 'Support Tickets', href: '/admin/tickets', icon: 'life-buoy', permissions: ['tickets.view'] },
+      { label: 'Notifications', href: '/admin/notifications', icon: 'bell', permissions: ['notifications.view'] },
+      { label: 'Audit Logs', href: '/admin/audit', icon: 'list', permissions: ['audit.view', 'audit_logs.view'] },
     ],
   },
   {
     title: 'Administration',
     items: [
-      { label: 'Administrators', href: '/admin/administrators', icon: 'user-check', permission: 'admin.manage' },
-      { label: 'Roles & Permissions', href: '/admin/roles', icon: 'shield', permission: 'admin.manage' },
-      { label: 'Platform Settings', href: '/admin/settings', icon: 'settings', permission: 'settings.manage' },
+      { label: 'Administrators', href: '/admin/administrators', icon: 'user-check', permissions: ['admins.view', 'admin.manage'] },
+      { label: 'Roles & Permissions', href: '/admin/roles', icon: 'shield', permissions: ['roles.view', 'admin.manage'] },
+      { label: 'Platform Settings', href: '/admin/settings', icon: 'settings', permissions: ['settings.view', 'help.manage'] },
       { label: 'Admin Profile', href: '/admin/profile', icon: 'user' },
     ],
   },
@@ -82,7 +82,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     () =>
       SECTIONS.map((section) => ({
         ...section,
-        items: section.items.filter((item) => !item.permission || can(item.permission)),
+        items: section.items.filter((item) => !item.permissions?.length || item.permissions.some((permission) => can(permission))),
       })).filter((section) => section.items.length > 0),
     [can],
   );

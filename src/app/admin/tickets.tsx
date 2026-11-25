@@ -1,7 +1,7 @@
 import { adminPageMetadata } from '../../lib/seo';
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, ScrollView, Text, View } from 'react-native';
-import { Avatar, ClayButton, ClayInput, Dropdown, ModalCard, SearchField, Select, useToast } from '../../components/ui';
+import { Avatar, ClayButton, ClayInput, Dropdown, ModalCard, SearchField, Select, useToast, type DropdownItem } from '../../components/ui';
 import { useAdmin } from '../../components/admin/AdminProvider';
 import {
   AdminCard,
@@ -54,6 +54,7 @@ export default function AdminTicketsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminTicketDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [assignees, setAssignees] = useState<AdminAssignee[]>([]);
   const [attachmentUrls, setAttachmentUrls] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<{ ticket: AdminTicket; action: TicketAction; value: string | null } | null>(null);
@@ -72,8 +73,8 @@ export default function AdminTicketsScreen() {
     if (!can('tickets.view')) return;
     void adminApi.listAssignees()
       .then((result) => setAssignees(result.items ?? []))
-      .catch(() => setAssignees([]));
-  }, [can]);
+      .catch((caught) => toast.show(`Could not load assignees: ${friendlyError(caught)}`, 'error'));
+  }, [can, toast]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,16 +110,20 @@ export default function AdminTicketsScreen() {
   const openDetail = async (ticket: AdminTicket) => {
     setDetailLoading(true);
     setDetail(null);
+    setDetailError(null);
     setAttachmentUrls({});
     try {
       const data = await adminApi.getTicket(ticket.id);
       setDetail(data);
       const paths = (data.attachments ?? []).map((item) => item.storage_path).filter(Boolean);
       if (paths.length) {
-        try { setAttachmentUrls(await signAdminPaths(paths, 'support-attachments')); } catch { setAttachmentUrls({}); }
+        try { setAttachmentUrls(await signAdminPaths(paths, 'support-attachments')); }
+        catch (caught) { toast.show(`Attachment previews unavailable: ${friendlyError(caught)}`, 'error'); }
       }
     } catch (caught) {
-      toast.show(friendlyError(caught), 'error');
+      const message = friendlyError(caught);
+      setDetailError(message);
+      toast.show(message, 'error');
     } finally {
       setDetailLoading(false);
     }
@@ -138,7 +143,8 @@ export default function AdminTicketsScreen() {
       setPending(null);
       void load();
       if (detail) {
-        try { setDetail(await adminApi.getTicket(detail.ticket.id)); } catch { /* keep detail */ }
+        try { setDetail(await adminApi.getTicket(detail.ticket.id)); }
+        catch (caught) { toast.show(`Ticket updated, but details could not refresh: ${friendlyError(caught)}`, 'error'); }
       }
     } catch (caught) {
       toast.show(friendlyError(caught), 'error');
@@ -151,6 +157,9 @@ export default function AdminTicketsScreen() {
 
   const dialogTitle = pending?.action === 'reply' ? 'Reply to ticket' : pending?.action === 'internal_note' ? 'Add internal note' : `${titleCase(pending?.action ?? '')} ticket`;
   const confirmLabel = pending?.action === 'reply' ? 'Send reply' : pending?.action === 'internal_note' ? 'Save note' : 'Update ticket';
+  const canManageTickets = can('tickets.manage');
+  const canAssignTickets = canManageTickets && can('support.assign');
+  const canResolveTickets = canManageTickets && can('support.resolve');
 
   return (
     <AdminPage
@@ -163,6 +172,8 @@ export default function AdminTicketsScreen() {
         <StatCard label="Open / active" value={stats.open ?? 0} icon="life-buoy" />
         <StatCard label="Resolved" value={stats.resolved ?? 0} icon="check-circle" />
         <StatCard label="Closed" value={stats.closed ?? 0} icon="lock" />
+        <StatCard label="Escalated" value={stats.escalated ?? 0} icon="arrow-up" />
+        <StatCard label="Resolution rate" value={`${stats.resolution_rate ?? 0}%`} icon="check-circle" />
         <StatCard label="Avg. first response" value={`${stats.average_response_minutes ?? 0}m`} icon="clock" />
       </View>
 
@@ -200,14 +211,21 @@ export default function AdminTicketsScreen() {
               { key: 'updated', label: 'Updated', width: 170, render: (row) => <Text style={[type.small, { color: colors.muted }]}>{formatDateTime(row.updated_at)}</Text> },
               {
                 key: 'actions', label: 'Actions', width: 130,
-                render: (row) => can('tickets.manage') ? (
-                  <Dropdown label="Ticket actions" items={[
+                render: (row) => {
+                  const items: DropdownItem[] = [
                     { key: 'open', label: 'Open ticket', icon: 'eye', onPress: () => void openDetail(row) },
-                    { key: 'status', label: 'Change status', icon: 'refresh-cw', onPress: () => startAction(row, 'status', 'in_progress') },
-                    { key: 'priority', label: 'Set urgent', icon: 'arrow-up', onPress: () => startAction(row, 'priority', 'urgent') },
-                    { key: 'reply', label: 'Send reply', icon: 'message-circle', onPress: () => startAction(row, 'reply') },
-                  ]} />
-                ) : <Text style={[type.small, { color: colors.muted }]}>View only</Text>,
+                  ];
+                  if (canResolveTickets) {
+                    items.push({ key: 'status', label: 'Change status', icon: 'refresh-cw', onPress: () => startAction(row, 'status', 'in_progress') });
+                  }
+                  if (canManageTickets) {
+                    items.push(
+                      { key: 'priority', label: 'Set urgent', icon: 'arrow-up', onPress: () => startAction(row, 'priority', 'urgent') },
+                      { key: 'reply', label: 'Send reply', icon: 'message-circle', onPress: () => startAction(row, 'reply') },
+                    );
+                  }
+                  return <Dropdown label="Ticket actions" items={items} />;
+                },
               },
             ]}
             rows={rows}
@@ -219,8 +237,9 @@ export default function AdminTicketsScreen() {
         </AdminCard>
       ) : null}
 
-      <ModalCard visible={detailLoading || Boolean(detail)} onClose={() => setDetail(null)} width={860}>
-        {detailLoading ? <Text style={[type.h3, { color: colors.ink }]}>Loading ticket…</Text> : null}
+      <ModalCard visible={detailLoading || Boolean(detail) || Boolean(detailError)} onClose={() => { setDetail(null); setDetailError(null); }} width={860}>
+        {detailLoading ? <LoadingCard label="Loading ticket" /> : null}
+        {!detailLoading && detailError ? <AdminCard><Text style={[type.body, { color: colors.danger }]}>{detailError}</Text></AdminCard> : null}
         {detail ? (
           <View style={{ maxHeight: '84%' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
@@ -237,15 +256,29 @@ export default function AdminTicketsScreen() {
               <KeyValue label="Opened" value={formatDateTime(detail.ticket.created_at)} />
               <KeyValue label="Last updated" value={formatDateTime(detail.ticket.updated_at)} />
 
-              {can('tickets.manage') ? (
+              {canManageTickets || canAssignTickets || canResolveTickets ? (
                 <View style={{ gap: 10, marginVertical: 14, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.line, borderBottomWidth: 1, borderBottomColor: colors.line }}>
-                  <Select label="Status" value={detail.ticket.status} options={STATUSES.map((item) => ({ label: titleCase(item), value: item }))} onValueChange={(next) => startAction(detail.ticket, 'status', next)} />
-                  <Select label="Priority" value={detail.ticket.priority} options={PRIORITIES.map((item) => ({ label: titleCase(item), value: item }))} onValueChange={(next) => startAction(detail.ticket, 'priority', next)} />
-                  <Select label="Assigned to" value={String(detail.ticket.assigned_to ?? '') || null} options={[{ label: 'Unassigned', value: '' }, ...assignees.map((person) => ({ label: `${person.display_name} (${titleCase(person.role)})`, value: person.user_id }))]} onValueChange={(next) => startAction(detail.ticket, 'assign', next || null)} />
-                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                    <ClayButton label="Reply to user" size="sm" icon="message-circle" onPress={() => startAction(detail.ticket, 'reply')} />
-                    <ClayButton label="Internal note" size="sm" variant="outline" icon="edit-3" onPress={() => startAction(detail.ticket, 'internal_note')} />
-                  </View>
+                  {canManageTickets ? (
+                    <>
+                      <Select
+                        label="Status"
+                        value={detail.ticket.status}
+                        options={STATUSES.filter((item) => canResolveTickets || !['resolved', 'closed'].includes(item)).map((item) => ({ label: titleCase(item), value: item }))}
+                        onValueChange={(next) => startAction(detail.ticket, 'status', next)}
+                      />
+                      {!canResolveTickets && ['resolved', 'closed'].includes(detail.ticket.status) ? (
+                        <Text style={[type.tiny, { color: colors.muted }]}>Closing or reopening a ticket requires the support.resolve permission.</Text>
+                      ) : null}
+                      <Select label="Priority" value={detail.ticket.priority} options={PRIORITIES.map((item) => ({ label: titleCase(item), value: item }))} onValueChange={(next) => startAction(detail.ticket, 'priority', next)} />
+                      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                        <ClayButton label="Reply to user" size="sm" icon="message-circle" onPress={() => startAction(detail.ticket, 'reply')} />
+                        <ClayButton label="Internal note" size="sm" variant="outline" icon="edit-3" onPress={() => startAction(detail.ticket, 'internal_note')} />
+                      </View>
+                    </>
+                  ) : null}
+                  {canAssignTickets ? (
+                    <Select label="Assigned to" value={String(detail.ticket.assigned_to ?? '') || null} options={[{ label: 'Unassigned', value: '' }, ...assignees.map((person) => ({ label: `${person.display_name} (${titleCase(person.role)})`, value: person.user_id }))]} onValueChange={(next) => startAction(detail.ticket, 'assign', next || null)} />
+                  ) : null}
                 </View>
               ) : null}
 
@@ -268,6 +301,24 @@ export default function AdminTicketsScreen() {
                     <View key={note.id} style={{ borderRadius: 12, borderWidth: 1, borderColor: colors.line, padding: 11, marginBottom: 7 }}>
                       <Text style={[type.small, { color: colors.ink }]}>{note.body}</Text>
                       <Text style={[type.tiny, { color: colors.muted, marginTop: 4 }]}>{note.author ?? 'Staff'} · {formatDateTime(note.created_at)}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              {detail.history?.length ? (
+                <View style={{ marginTop: 14 }}>
+                  <Text style={[type.h3, { color: colors.ink, marginBottom: 8 }]}>Staff history</Text>
+                  {detail.history.map((entry, index) => (
+                    <View key={`${entry.action}-${entry.created_at}-${index}`} style={{ borderBottomWidth: 1, borderBottomColor: colors.line, paddingVertical: 8, gap: 3 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+                        <Text style={[type.smallMedium, { color: colors.ink }]}>{titleCase(entry.action)}</Text>
+                        <Text style={[type.tiny, { color: colors.muted }]}>{formatDateTime(entry.created_at)}</Text>
+                      </View>
+                      {entry.actor_username || entry.actor ? <Text style={[type.tiny, { color: colors.muted }]}>By @{entry.actor_username ?? entry.actor}</Text> : null}
+                      {typeof entry.changes?.previous_status === 'string' ? <Text style={[type.tiny, { color: colors.muted }]}>Previous status: {titleCase(entry.changes.previous_status)}</Text> : null}
+                      {typeof entry.changes?.value === 'string' && entry.changes.value ? <Text style={[type.tiny, { color: colors.muted }]}>Value: {titleCase(entry.changes.value)}</Text> : null}
+                      {typeof entry.changes?.note === 'string' && entry.changes.note ? <Text style={[type.small, { color: colors.inkSoft }]}>{truncate(entry.changes.note, 400)}</Text> : null}
                     </View>
                   ))}
                 </View>
@@ -308,6 +359,8 @@ export default function AdminTicketsScreen() {
         reason={reason}
         onReasonChange={setReason}
         requireReason={pending?.action === 'reply' || pending?.action === 'internal_note'}
+        reasonLabel={pending?.action === 'reply' ? 'Reply to the user' : pending?.action === 'internal_note' ? 'Internal note for staff' : undefined}
+        reasonPlaceholder={pending?.action === 'reply' ? 'Write a clear, kind response' : pending?.action === 'internal_note' ? 'Add context visible only to staff' : undefined}
         onConfirm={() => void confirmAction()}
         onCancel={() => setPending(null)}
       />

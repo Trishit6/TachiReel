@@ -344,7 +344,7 @@ export type AdminReportDetail = {
   reporter: Record<string, unknown>;
   reported_user: Record<string, unknown>;
   content: Record<string, unknown>;
-  notes: Record<string, unknown>[];
+  notes: AdminHistoryEntry[];
 };
 
 export type AdminTicket = {
@@ -364,6 +364,15 @@ export type AdminTicket = {
   last_message_at: string | null;
 };
 
+export type AdminHistoryEntry = {
+  id?: string;
+  action: string;
+  created_at: string;
+  actor?: string | null;
+  actor_username?: string | null;
+  changes?: Record<string, unknown>;
+};
+
 export type AdminTicketDetail = {
   ticket: AdminTicket;
   user: Record<string, unknown>;
@@ -371,6 +380,7 @@ export type AdminTicketDetail = {
   messages: { id: string; body: string; author_role: string; created_at: string; author_id: string | null }[];
   internal_notes: { id: string; body: string; created_at: string; author: string | null }[];
   attachments: { id: string; storage_path: string; file_name: string; content_type: string; byte_size: number; created_at: string }[];
+  history: AdminHistoryEntry[];
 };
 
 export type AdminNotification = {
@@ -386,6 +396,17 @@ export type AdminNotification = {
   created_at: string;
   recipient_count: number;
   delivered_count: number;
+};
+
+export type AdminNotificationDetail = {
+  notification: AdminNotification;
+  delivery: {
+    recipient_count: number;
+    delivered_count: number;
+    read_count: number;
+    recent: { username: string | null; delivered_at: string; read_at: string | null }[];
+  };
+  history: AdminHistoryEntry[];
 };
 
 export type AdminTemplate = {
@@ -424,6 +445,7 @@ export type AdminAccount = {
   last_sign_in_at: string | null;
   custom_role: string | null;
   extra_permissions: string[] | null;
+  is_protected?: boolean;
 };
 
 export type AdminRoleDefinition = {
@@ -485,7 +507,7 @@ export function friendlyError(error: unknown): string {
     return 'Too many actions at once. Please wait a moment and try again.';
   }
   if (message.includes('42883') || message.includes('42P01') || message.toLowerCase().includes('could not find the function')) {
-    return 'The admin database migration has not been applied yet. Ask a Supabase administrator to run supabase/admin_schema.sql.';
+    return 'The admin database migration has not been applied yet. Ask a Supabase administrator to apply supabase/admin_schema.sql and supabase/admin_rbac_v2.sql in order.';
   }
   return message;
 }
@@ -499,6 +521,10 @@ async function callRpc<T>(name: string, args: Record<string, unknown> = {}): Pro
 
 export const adminApi = {
   access: () => callRpc<AdminAccess[]>('admin_get_my_access'),
+  logAuthEvent: (event: 'login' | 'logout') =>
+    callRpc<{ success: boolean; audited: boolean }>('admin_log_auth_event', { p_event: event }),
+  exportAnalytics: (from: string, to: string) =>
+    callRpc<Record<string, unknown>>('admin_export_analytics', { p_from: from, p_to: to }),
   dashboard: (from: string, to: string) => callRpc<DashboardData>('admin_dashboard', { p_from: from, p_to: to }),
   analytics: (from: string, to: string) => callRpc<AnalyticsData>('admin_analytics', { p_from: from, p_to: to }),
 
@@ -506,10 +532,16 @@ export const adminApi = {
   getUser: (userId: string) => callRpc<AdminUserDetail>('admin_get_user', { p_user_id: userId }),
   mutateUser: (userId: string, action: string, value: string | null, reason: string) =>
     callRpc<Record<string, unknown>>('admin_mutate_user', { p_user_id: userId, p_action: action, p_value: value, p_reason: reason }),
+  editUser: (userId: string, displayName: string, username: string, bio: string) =>
+    callRpc<Record<string, unknown>>('admin_edit_user', {
+      p_user_id: userId, p_display_name: displayName, p_username: username, p_bio: bio,
+    }),
   warnUser: (userId: string, reason: string, reportId: string | null = null) =>
     callRpc<Record<string, unknown>>('admin_warn_user', { p_user_id: userId, p_reason: reason, p_report_id: reportId }),
 
   listContent: (args: Record<string, unknown>) => callRpc<PagedResult<AdminContent>>('admin_list_content', args),
+  getContentHistory: (kind: string, id: string) =>
+    callRpc<{ items: AdminHistoryEntry[] }>('admin_get_content_history', { p_kind: kind, p_id: id }),
   mutateContent: (kind: string, id: string, action: string, value: string | null, reason: string) =>
     callRpc<Record<string, unknown>>('admin_mutate_content', { p_kind: kind, p_id: id, p_action: action, p_value: value, p_reason: reason }),
 
@@ -524,6 +556,7 @@ export const adminApi = {
     callRpc<Record<string, unknown>>('admin_mutate_ticket', { p_ticket_id: id, p_action: action, p_value: value, p_body: body }),
 
   listNotifications: (args: Record<string, unknown>) => callRpc<PagedResult<AdminNotification>>('admin_list_notifications', args),
+  getNotification: (id: string) => callRpc<AdminNotificationDetail>('admin_get_notification', { p_notification_id: id }),
   createNotification: (args: Record<string, unknown>) => callRpc<Record<string, unknown>>('admin_create_notification', args),
   sendNotification: (id: string) => callRpc<Record<string, unknown>>('admin_send_notification', { p_notification_id: id }),
   deleteNotification: (id: string) => callRpc<Record<string, unknown>>('admin_delete_notification', { p_notification_id: id }),

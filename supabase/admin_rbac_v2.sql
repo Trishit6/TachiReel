@@ -92,6 +92,20 @@ as $$
   ]::text[];
 $$;
 
+-- Permissions that are never delegable by a non-Super Admin, whether through a
+-- custom role or a per-administrator override.
+create or replace function private.super_admin_only_permissions()
+returns text[]
+language sql
+immutable
+set search_path = ''
+as $$
+  select array[
+    'admin.manage', 'roles.create', 'roles.edit', 'roles.delete', 'permissions.assign',
+    'admins.create', 'admins.edit', 'admins.deactivate', 'settings.manage'
+  ]::text[];
+$$;
+
 -- -----------------------------------------------------------------------------
 -- 3. Role -> permission matrix. Existing identifiers are retained verbatim.
 -- -----------------------------------------------------------------------------
@@ -194,6 +208,7 @@ as $$
   select exists (
     select 1
     from public.admin_roles r
+    join public.profiles p on p.id = r.user_id and p.account_status = 'active'
     left join public.admin_custom_roles c on c.key = r.custom_role
     where r.user_id = auth.uid()
       and r.is_active
@@ -240,7 +255,7 @@ as $$
   join public.profiles p on p.id = r.user_id
   left join auth.users u on u.id = r.user_id
   left join public.admin_custom_roles c on c.key = r.custom_role
-  where r.user_id = auth.uid() and r.is_active;
+  where r.user_id = auth.uid() and r.is_active and p.account_status = 'active';
 $$;
 
 -- The official initial Super Admin is identified by its auth email ONLY to
@@ -278,10 +293,17 @@ language plpgsql security definer stable set search_path = ''
 as $$
 declare v_items jsonb;
 begin
-  perform private.require_admin_permission('admin.manage');
+  -- Both full administrators and read-only audience roles may list staff;
+  -- every mutating RPC still requires the stricter admin.manage permission.
+  if not (private.has_admin_permission('admin.manage') or private.has_admin_permission('admins.view')) then
+    raise exception using
+      message = 'You do not have permission to perform this administrative action.',
+      errcode = '42501';
+  end if;
   select coalesce(jsonb_agg(to_jsonb(x) order by x.created_at desc), '[]'::jsonb) into v_items
   from (
     select r.user_id, r.role::text as role, r.is_active, r.created_at, r.updated_at,
+           private.is_bootstrap_super_admin(r.user_id) as is_protected,
            r.custom_role, r.extra_permissions,
            p.display_name, p.username, p.avatar_url, u.email,
            u.last_sign_in_at,
@@ -312,8 +334,22 @@ declare
   v_existing_active boolean;
   v_caller_role text;
 begin
-  perform private.require_admin_permission('admin.manage');
+  -- admin.manage remains the legacy all-access permission; the granular
+  -- admins.* permissions can also authorise the matching operation.
+  if not (
+    private.has_admin_permission('admin.manage')
+    or private.has_admin_permission('admins.create')
+    or private.has_admin_permission('admins.edit')
+    or private.has_admin_permission('admins.deactivate')
+  ) then
+    raise exception using
+      message = 'You do not have permission to perform this administrative action.',
+      errcode = '42501';
+  end if;
   perform private.check_admin_rate_limit('admin_role_change', 10, 300);
+  -- Serialise role changes so concurrent admins cannot both deactivate the
+  -- last active Super Admin after each observes more than one.
+  perform pg_advisory_xact_lock(hashtext('tachireel.admin_roles'));
 
   -- Even another Super Admin cannot demote, deactivate or remove the initial
   -- Super Admin through an RPC. Only the server-side seed process may change it.
@@ -325,6 +361,23 @@ begin
 
   select role, is_active into v_existing_role, v_existing_active
   from public.admin_roles where user_id = p_user_id;
+
+  if p_action in ('deactivate', 'activate', 'remove')
+     and not (private.has_admin_permission('admin.manage') or private.has_admin_permission('admins.deactivate')) then
+    raise exception using
+      message = 'You do not have permission to change administrator status.',
+      errcode = '42501';
+  end if;
+  if coalesce(p_action, 'upsert') = 'upsert'
+     and not (
+       private.has_admin_permission('admin.manage')
+       or (v_existing_role is null and private.has_admin_permission('admins.create'))
+       or (v_existing_role is not null and private.has_admin_permission('admins.edit'))
+     ) then
+    raise exception using
+      message = 'You do not have permission to assign this administrator role.',
+      errcode = '42501';
+  end if;
 
   select count(*)::int into v_super_count
   from public.admin_roles where role = 'super_admin' and is_active;
@@ -449,7 +502,15 @@ declare
   v_key text := lower(btrim(coalesce(p_key, '')));
   v_permissions text[];
 begin
-  perform private.require_admin_permission('permissions.assign');
+  if not (
+    private.has_admin_permission('permissions.assign')
+    or private.has_admin_permission('admin.manage')
+    or private.has_admin_permission('roles.create')
+  ) then
+    raise exception using
+      message = 'You do not have permission to create roles.',
+      errcode = '42501';
+  end if;
   perform private.check_admin_rate_limit('custom_role_write', 10, 300);
 
   if v_key !~ '^[a-z][a-z0-9_]{2,39}$' then
@@ -461,6 +522,16 @@ begin
   if length(btrim(coalesce(p_label, ''))) < 2 then
     raise exception 'Give the role a name of at least two characters.';
   end if;
+  if exists (select 1 from public.admin_custom_roles where key = v_key)
+     and not (
+       private.has_admin_permission('permissions.assign')
+       or private.has_admin_permission('admin.manage')
+       or private.has_admin_permission('roles.edit')
+     ) then
+    raise exception using
+      message = 'You do not have permission to edit roles.',
+      errcode = '42501';
+  end if;
 
   select coalesce(array_agg(distinct p order by p), '{}'::text[])
   into v_permissions
@@ -471,6 +542,23 @@ begin
     where p <> all (private.admin_all_permissions())
   ) then
     raise exception 'One or more permission identifiers are not recognised.';
+  end if;
+
+  -- A delegated operator must not be able to build a custom role that is more
+  -- powerful than itself, or one containing Super-Admin-only permissions.
+  if private.current_admin_role() is distinct from 'super_admin' then
+    if exists (
+      select 1 from unnest(v_permissions) as p
+      where p = any (private.super_admin_only_permissions())
+    ) then
+      raise exception 'Only a Super Admin can grant that permission.';
+    end if;
+    if exists (
+      select 1 from unnest(v_permissions) as p
+      where not private.has_admin_permission(p)
+    ) then
+      raise exception 'You can only grant permissions you already hold.';
+    end if;
   end if;
 
   insert into public.admin_custom_roles (key, label, description, permissions, created_by)
@@ -494,7 +582,15 @@ language plpgsql security definer set search_path = ''
 as $$
 declare v_key text := btrim(coalesce(p_key, ''));
 begin
-  perform private.require_admin_permission('permissions.assign');
+  if not (
+    private.has_admin_permission('permissions.assign')
+    or private.has_admin_permission('admin.manage')
+    or private.has_admin_permission('roles.delete')
+  ) then
+    raise exception using
+      message = 'You do not have permission to delete roles.',
+      errcode = '42501';
+  end if;
   perform private.check_admin_rate_limit('custom_role_write', 10, 300);
 
   if v_key = any (enum_range(null::public.admin_role)::text[]) then
@@ -543,6 +639,16 @@ begin
      and not exists (select 1 from public.admin_custom_roles where key = v_custom_role) then
     raise exception 'That custom role does not exist.';
   end if;
+  if v_custom_role is not null and private.current_admin_role() is distinct from 'super_admin' then
+    if exists (
+      select 1
+      from public.admin_custom_roles c, unnest(c.permissions) as p
+      where c.key = v_custom_role
+        and (p = any (private.super_admin_only_permissions()) or not private.has_admin_permission(p))
+    ) then
+      raise exception 'You can only assign a custom role whose permissions you hold and that contains no Super-Admin-only permission.';
+    end if;
+  end if;
 
   select coalesce(array_agg(distinct p order by p), '{}'::text[])
   into v_extra
@@ -555,15 +661,21 @@ begin
     raise exception 'One or more permission identifiers are not recognised.';
   end if;
 
-  -- A non-Super-Admin operator can never grant Super-Admin-only permissions.
-  if private.current_admin_role() is distinct from 'super_admin'
-     and exists (
-       select 1 from unnest(v_extra) as p
-       where p in ('admin.manage', 'roles.create', 'roles.edit', 'roles.delete',
-                   'permissions.assign', 'admins.create', 'admins.edit', 'admins.deactivate',
-                   'settings.manage')
-     ) then
-    raise exception 'Only a Super Admin can grant that permission.';
+  -- A non-Super-Admin operator can never grant Super-Admin-only permissions
+  -- or permissions it does not itself hold.
+  if private.current_admin_role() is distinct from 'super_admin' then
+    if exists (
+      select 1 from unnest(v_extra) as p
+      where p = any (private.super_admin_only_permissions())
+    ) then
+      raise exception 'Only a Super Admin can grant that permission.';
+    end if;
+    if exists (
+      select 1 from unnest(v_extra) as p
+      where not private.has_admin_permission(p)
+    ) then
+      raise exception 'You can only grant permissions you already hold.';
+    end if;
   end if;
 
   update public.admin_roles
@@ -577,6 +689,40 @@ begin
 
   return jsonb_build_object('success', true, 'user_id', p_user_id,
                             'custom_role', v_custom_role, 'extra_permissions', v_extra);
+end;
+$$;
+
+-- Marker used by admin_schema.sql to avoid silently downgrading this migration
+-- when the base admin migration is re-applied on an upgraded database.
+create or replace function private.admin_rbac_v2_installed()
+returns boolean
+language sql
+immutable
+set search_path = ''
+as $$ select true $$;
+
+revoke all on function private.admin_rbac_v2_installed() from public;
+revoke all on function private.admin_rbac_v2_installed() from anon;
+revoke all on function private.admin_rbac_v2_installed() from authenticated;
+
+-- Successful administrator sign-in and explicit sign-out are audited from the
+-- client after Supabase Auth validates the credentials. Failed logins cannot be
+-- attributed server-side here; enable Supabase Auth rate limiting/CAPTCHA in
+-- the project dashboard as the authoritative control.
+create or replace function public.admin_log_auth_event(p_event text)
+returns jsonb
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  if coalesce(p_event, '') not in ('login', 'logout') then
+    raise exception 'Unknown authentication event.';
+  end if;
+  if not exists (select 1 from public.admin_roles where user_id = auth.uid()) then
+    return jsonb_build_object('success', true, 'audited', false);
+  end if;
+  perform private.write_admin_audit('auth.' || p_event, 'admin', auth.uid()::text,
+    jsonb_build_object('event', p_event));
+  return jsonb_build_object('success', true, 'audited', true);
 end;
 $$;
 
@@ -607,7 +753,7 @@ begin
     where n.nspname = 'public' and p.proname in (
       'admin_get_my_access', 'admin_list_admins', 'admin_mutate_admin',
       'admin_list_roles', 'admin_upsert_custom_role', 'admin_delete_custom_role',
-      'admin_set_admin_access'
+      'admin_set_admin_access', 'admin_log_auth_event'
     )
   loop
     execute format('revoke all on function %s from public', r.sig);

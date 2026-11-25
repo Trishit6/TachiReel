@@ -101,14 +101,40 @@ export async function attachMedia(client: SupabaseClient, posts: FeedPost[]): Pr
   }));
 }
 
+export type FollowRequest = {
+  follower_id: string;
+  display_name: string;
+  username: string;
+  avatar_url: string | null;
+  created_at: string;
+};
+
 export async function fetchFollowingIds(client: SupabaseClient, userId: string): Promise<string[]> {
   const { data, error } = await client
     .from('follows')
     .select('followed_id')
     .eq('follower_id', userId)
-    .eq('status', 'accepted');
+    .in('status', ['pending', 'accepted']);
   if (error) throw error;
   return (data ?? []).map((row) => row.followed_id as string);
+}
+
+export async function fetchFollowRequests(client: SupabaseClient): Promise<FollowRequest[]> {
+  const { data, error } = await client.rpc('get_my_follow_requests');
+  if (error) throw error;
+  return (data ?? []) as FollowRequest[];
+}
+
+export async function respondToFollowRequest(
+  client: SupabaseClient,
+  followerId: string,
+  accept: boolean,
+): Promise<void> {
+  const { error } = await client.rpc('respond_to_follow_request', {
+    p_follower_id: followerId,
+    p_accept: accept,
+  });
+  if (error) throw error;
 }
 
 export async function fetchFeed(
@@ -228,7 +254,7 @@ export async function fetchSuggestedPeople(client: SupabaseClient, userId: strin
 export async function followUser(client: SupabaseClient, followerId: string, followedId: string): Promise<void> {
   const { error } = await client
     .from('follows')
-    .upsert({ follower_id: followerId, followed_id: followedId, status: 'accepted' }, { onConflict: 'follower_id,followed_id' });
+    .upsert({ follower_id: followerId, followed_id: followedId, status: 'pending' }, { onConflict: 'follower_id,followed_id' });
   if (error) throw error;
 }
 

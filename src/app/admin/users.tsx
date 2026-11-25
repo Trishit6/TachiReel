@@ -45,7 +45,7 @@ function value(row: Record<string, unknown>, key: string): string {
 }
 
 export default function AdminUsersScreen() {
-  const { can } = useAdmin();
+  const { can, access } = useAdmin();
   const toast = useToast();
   const { colors, type } = useTheme();
   const [search, setSearch] = useState('');
@@ -62,7 +62,9 @@ export default function AdminUsersScreen() {
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState('overview');
+  const [editDraft, setEditDraft] = useState<{ id: string; displayName: string; username: string; bio: string } | null>(null);
   const [pending, setPending] = useState<UserAction | null>(null);
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
@@ -108,13 +110,46 @@ export default function AdminUsersScreen() {
   const openDetail = async (user: AdminUser) => {
     setDetailLoading(true);
     setDetail(null);
+    setDetailError(null);
     setDetailTab('overview');
     try {
       setDetail(await adminApi.getUser(user.id));
     } catch (caught) {
-      toast.show(friendlyError(caught), 'error');
+      const message = friendlyError(caught);
+      setDetailError(message);
+      toast.show(message, 'error');
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const openEditUser = async (userId: string) => {
+    try {
+      const loaded = detail?.profile.id === userId ? detail : await adminApi.getUser(userId);
+      setEditDraft({
+        id: loaded.profile.id,
+        displayName: loaded.profile.display_name,
+        username: loaded.profile.username,
+        bio: loaded.profile.bio ?? '',
+      });
+    } catch (caught) {
+      toast.show(friendlyError(caught), 'error');
+    }
+  };
+
+  const saveEdit = async () => {
+    if (!editDraft) return;
+    setSaving(true);
+    try {
+      await adminApi.editUser(editDraft.id, editDraft.displayName.trim(), editDraft.username.trim().toLowerCase(), editDraft.bio.trim());
+      toast.show('Profile updated.', 'success');
+      setEditDraft(null);
+      void load();
+      setDetail(await adminApi.getUser(editDraft.id));
+    } catch (caught) {
+      toast.show(friendlyError(caught), 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -140,6 +175,10 @@ export default function AdminUsersScreen() {
       toast.show('Account updated.', 'success');
       setPending(null);
       void load();
+      if (detail) {
+        try { setDetail(await adminApi.getUser(detail.profile.id)); }
+        catch (caught) { toast.show(`Account updated, but details could not refresh: ${friendlyError(caught)}`, 'error'); }
+      }
     } catch (caught) {
       toast.show(friendlyError(caught), 'error');
     } finally {
@@ -235,6 +274,7 @@ export default function AdminUsersScreen() {
                     label={`Actions for ${row.username}`}
                     items={[
                       { key: 'view', label: 'View details', icon: 'eye', onPress: () => void openDetail(row) },
+                      { key: 'edit', label: 'Edit profile', icon: 'edit-3', disabled: !can('users.edit') || row.id === access?.user_id, onPress: () => void openEditUser(row.id) },
                       { key: 'suspend', label: 'Suspend', icon: 'slash', disabled: !can('users.suspend'), onPress: () => startAction({ user: row, action: 'suspend' }) },
                       { key: 'reactivate', label: 'Reactivate', icon: 'check-circle', disabled: !can('users.suspend'), onPress: () => startAction({ user: row, action: 'reactivate' }) },
                       { key: 'verify', label: 'Mark verified', icon: 'shield', disabled: !can('users.verify_minor'), onPress: () => startAction({ user: row, action: 'verify' }) },
@@ -256,8 +296,9 @@ export default function AdminUsersScreen() {
         </AdminCard>
       ) : null}
 
-      <ModalCard visible={detailLoading || Boolean(detail)} onClose={() => setDetail(null)} width={860}>
-        {detailLoading ? <Text style={[type.h3, { color: colors.ink }]}>Loading account details…</Text> : null}
+      <ModalCard visible={detailLoading || Boolean(detail) || Boolean(detailError)} onClose={() => { setDetail(null); setDetailError(null); }} width={860}>
+        {detailLoading ? <LoadingCard label="Loading account details" /> : null}
+        {!detailLoading && detailError ? <AdminCard><Text style={[type.body, { color: colors.danger }]}>{detailError}</Text></AdminCard> : null}
         {detail ? (
           <View style={{ maxHeight: '82%' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 }}>
@@ -267,6 +308,9 @@ export default function AdminUsersScreen() {
                 <Text style={[type.small, { color: colors.muted }]}>@{detail.profile.username} · {detail.profile.email ?? 'No email'}</Text>
               </View>
               <StatusBadge status={detail.profile.account_status} />
+              {can('users.edit') && detail.profile.id !== access?.user_id ? (
+                <ClayButton label="Edit profile" size="sm" variant="outline" icon="edit-3" onPress={() => void openEditUser(detail.profile.id)} />
+              ) : null}
             </View>
             <Tabs items={DETAIL_TABS} active={detailTab} onChange={setDetailTab} />
             <ScrollView style={{ maxHeight: 420, marginTop: 14 }} showsVerticalScrollIndicator>
@@ -292,6 +336,19 @@ export default function AdminUsersScreen() {
               {detailTab === 'activity' ? <DetailList rows={detail.activity} empty="No recent activity." primary="label" secondary="at" /> : null}
             </ScrollView>
           </View>
+        ) : null}
+      </ModalCard>
+
+      <ModalCard visible={Boolean(editDraft)} onClose={() => setEditDraft(null)} width={560}>
+        {editDraft ? (
+          <ScrollView style={{ maxHeight: '84%' }} showsVerticalScrollIndicator contentContainerStyle={{ gap: 14 }}>
+            <Text style={[type.h3, { color: colors.ink }]}>Edit profile</Text>
+            <Text style={[type.small, { color: colors.muted }]}>Only display name, username and bio can be changed here. Safety fields remain protected by database rules.</Text>
+            <ClayInput label="Display name" value={editDraft.displayName} onChangeText={(value) => setEditDraft({ ...editDraft, displayName: value })} maxLength={80} />
+            <ClayInput label="Username" value={editDraft.username} onChangeText={(value) => setEditDraft({ ...editDraft, username: value.toLowerCase() })} maxLength={30} autoCapitalize="none" />
+            <ClayInput label="Bio" value={editDraft.bio} onChangeText={(value) => setEditDraft({ ...editDraft, bio: value })} multiline maxLength={300} />
+            <ClayButton label="Save profile" icon="save" loading={saving} onPress={() => void saveEdit()} />
+          </ScrollView>
         ) : null}
       </ModalCard>
 

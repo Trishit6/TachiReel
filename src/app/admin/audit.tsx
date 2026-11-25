@@ -9,14 +9,19 @@ import { useTheme } from '../../theme/theme';
 
 const PAGE_SIZE = 25;
 const ACTIONS = [
-  'user.suspend', 'user.reactivate', 'user.set_verification', 'user.warn', 'user.delete',
+  'auth.login', 'auth.logout', 'analytics.export',
+  'user.edit', 'user.suspend', 'user.reactivate', 'user.set_verification', 'user.warn', 'user.delete',
   'content.set_status', 'content.remove', 'content.restore', 'content.feature', 'content.unfeature',
-  'report.assign', 'report.decide', 'report.priority', 'report.category',
-  'ticket.status', 'ticket.assign', 'ticket.reply', 'ticket.internal_note',
-  'notification.create', 'notification.send', 'notification.delete', 'setting.update',
-  'admin_role.upsert', 'admin_role.remove',
+  'report.assign', 'report.decide', 'report.priority', 'report.category', 'report.note',
+  'report.warn_user', 'report.suspend_user', 'report.remove_content',
+  'ticket.status', 'ticket.priority', 'ticket.assign', 'ticket.reply', 'ticket.internal_note',
+  'notification.create', 'notification.send', 'notification.delete',
+  'template.create', 'template.upsert', 'template.delete',
+  'help.create', 'help.upsert', 'help.delete',
+  'setting.update', 'admin_role.upsert', 'admin_role.activate', 'admin_role.deactivate',
+  'admin_role.remove', 'custom_role.upsert', 'custom_role.delete', 'admin_permissions.set',
 ];
-const RESOURCES = ['user', 'post', 'reelyx', 'comment', 'report', 'ticket', 'notification', 'setting', 'admin', 'notification_template'];
+const RESOURCES = ['user', 'post', 'reelyx', 'comment', 'report', 'ticket', 'notification', 'setting', 'admin', 'admin_role', 'notification_template', 'category', 'article', 'faq', 'analytics'];
 
 function displayValue(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
@@ -31,6 +36,7 @@ export default function AdminAuditScreen() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [action, setAction] = useState('');
   const [resource, setResource] = useState('');
+  const [actorId, setActorId] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [page, setPage] = useState(1);
@@ -56,6 +62,7 @@ export default function AdminAuditScreen() {
         p_search: debouncedSearch,
         p_action: action,
         p_resource: resource,
+        p_actor_id: actorId.trim() || null,
         p_from: from ? `${from}T00:00:00.000Z` : null,
         p_to: to ? `${to}T23:59:59.999Z` : null,
         p_limit: PAGE_SIZE,
@@ -70,14 +77,16 @@ export default function AdminAuditScreen() {
     } finally {
       setLoading(false);
     }
-  }, [action, debouncedSearch, from, page, resource, to]);
+  }, [action, actorId, debouncedSearch, from, page, resource, to]);
 
   useEffect(() => {
     const timer = setTimeout(() => void load(), 0);
     return () => clearTimeout(timer);
   }, [load]);
 
-  if (!can('audit.view')) return <AdminRestricted permission="audit.view" />;
+  if (!can('audit.view') && !can('audit_logs.view')) {
+    return <AdminRestricted permission="audit.view or audit_logs.view" />;
+  }
 
   return (
     <AdminPage
@@ -95,6 +104,9 @@ export default function AdminAuditScreen() {
           </View>
           <View style={{ width: 160 }}>
             <Select label="Resource" value={resource || null} onValueChange={(next) => { setResource(next === 'all' ? '' : next); setPage(1); }} options={[{ label: 'All resources', value: 'all' }, ...RESOURCES.map((item) => ({ label: titleCase(item), value: item }))]} />
+          </View>
+          <View style={{ minWidth: 260 }}>
+            <ClayInput label="Actor user ID" value={actorId} onChangeText={(next) => { setActorId(next); setPage(1); }} placeholder="Optional UUID" />
           </View>
           <View style={{ width: 150 }}><ClayInput label="From" value={from} onChangeText={setFrom} placeholder="YYYY-MM-DD" /></View>
           <View style={{ width: 150 }}><ClayInput label="To" value={to} onChangeText={setTo} placeholder="YYYY-MM-DD" /></View>

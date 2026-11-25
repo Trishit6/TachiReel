@@ -47,7 +47,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "seed:super-admin": "node scripts/seed-super-admin.mjs"
+    "seed:super-admin": "node scripts/seed-super-admin.mjs",
+    "verify:rbac": "node scripts/verify-rbac-local.mjs",
+    "generate:types": "npx supabase gen types typescript --remote --schema public --schema auth > src/lib/database.types.ts"
   },
   "private": true
 }

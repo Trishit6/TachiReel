@@ -65,7 +65,7 @@ export function StatCard({
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text style={[type.small, { color: colors.muted }]}>{label}</Text>
-        <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: accent ? '#F6E1DB' : colors.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: accent ? colors.dangerSoft : colors.accentSoft, alignItems: 'center', justifyContent: 'center' }}>
           <Feather name={icon} size={15} color={accent ? brand.reelRed : colors.accent} />
         </View>
       </View>
@@ -260,6 +260,8 @@ export function ReasonDialog({
   onConfirm,
   onCancel,
   requireReason = true,
+  reasonLabel,
+  reasonPlaceholder,
 }: {
   visible: boolean;
   title: string;
@@ -272,6 +274,8 @@ export function ReasonDialog({
   onConfirm: () => void;
   onCancel: () => void;
   requireReason?: boolean;
+  reasonLabel?: string;
+  reasonPlaceholder?: string;
 }) {
   const invalid = requireReason && reason.trim().length < 3;
   return (
@@ -286,11 +290,11 @@ export function ReasonDialog({
       onCancel={onCancel}
     >
       <ClayInput
-        label={requireReason ? 'Reason (saved to the audit log)' : 'Note (optional)'}
+        label={reasonLabel ?? (requireReason ? 'Reason (saved to the audit log)' : 'Note (optional)')}
         value={reason}
         onChangeText={onReasonChange}
         multiline
-        placeholder="Explain why this action is needed"
+        placeholder={reasonPlaceholder ?? 'Explain why this action is needed'}
         maxLength={500}
       />
       {invalid ? <Notice text="Enter at least 3 characters." tone="error" /> : null}

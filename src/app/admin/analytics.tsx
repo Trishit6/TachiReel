@@ -1,8 +1,9 @@
 import { adminPageMetadata } from '../../lib/seo';
 import { useCallback, useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { SemanticHeading } from '../../components/SemanticHeading';
-import { Chip, ClayButton, ClayInput, ScreenScroll } from '../../components/ui';
+import { Chip, ClayButton, ClayInput, ScreenScroll, useToast } from '../../components/ui';
 import { useAdmin } from '../../components/admin/AdminProvider';
 import { AdminCard, AdminRestricted, LineChart, LoadingCard, StatCard } from '../../components/admin/AdminUI';
 import {
@@ -19,6 +20,7 @@ import { useTheme } from '../../theme/theme';
 
 export default function AdminAnalyticsScreen() {
   const { can } = useAdmin();
+  const toast = useToast();
   const { colors, type } = useTheme();
   const [preset, setPreset] = useState<RangePreset>('30d');
   const [from, setFrom] = useState('');
@@ -26,6 +28,35 @@ export default function AdminAnalyticsScreen() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const exportData = async () => {
+    setExporting(true);
+    try {
+      if (preset === 'custom' && (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to))) {
+        throw new Error('Enter both custom dates as YYYY-MM-DD.');
+      }
+      const range = rangeForPreset(preset, from, to);
+      const payload = await adminApi.exportAnalytics(range.from, range.to);
+      const json = JSON.stringify(payload, null, 2);
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `tachireel-analytics-${to.slice(0, 10) || 'export'}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+        toast.show('Analytics exported as JSON.', 'success');
+      } else {
+        await Clipboard.setStringAsync(json);
+        toast.show('Analytics JSON copied to clipboard.', 'success');
+      }
+    } catch (caught) {
+      toast.show(friendlyError(caught), 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +99,9 @@ export default function AdminAnalyticsScreen() {
       <AdminCard>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <ClayButton label="Refresh" variant="secondary" size="sm" icon="refresh-cw" loading={loading} onPress={() => void load()} />
+          {can('analytics.export') ? (
+            <ClayButton label="Export JSON" variant="outline" size="sm" icon="download" loading={exporting} onPress={() => void exportData()} />
+          ) : null}
           {RANGE_PRESETS.map((option) => (
             <Chip key={option.value} label={option.label} active={preset === option.value} onPress={() => setPreset(option.value)} />
           ))}

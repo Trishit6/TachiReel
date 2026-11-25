@@ -7,15 +7,43 @@ import { AdminCard, AdminPage, AdminRestricted, KeyValue, LoadingCard, StatusBad
 import { adminApi, formatDateTime, friendlyError, truncate, type HelpContent } from '../../lib/admin';
 import { useTheme } from '../../theme/theme';
 
-type SettingKey = 'general.platform_name' | 'general.description' | 'support.contact_email' | 'content.max_post_media_mb' | 'content.max_caption_chars';
-type SettingDefinition = { key: SettingKey; label: string; description: string; numeric?: boolean; max?: number };
+type SettingCategory = 'general' | 'moderation' | 'notifications' | 'security' | 'support';
+type SettingDefinition = {
+  key: string;
+  label: string;
+  description: string;
+  category: SettingCategory;
+  kind: 'text' | 'number' | 'boolean';
+  min?: number;
+  max?: number;
+};
 
+// Every key here is validated server-side by admin_set_setting; these limits
+// mirror that validation so the form fails early with a clear message.
 const SETTINGS: SettingDefinition[] = [
-  { key: 'general.platform_name', label: 'Platform name', description: 'Shown in headers, emails and public metadata.' },
-  { key: 'general.description', label: 'Platform description', description: 'Short summary used in share previews.' },
-  { key: 'support.contact_email', label: 'Support email', description: 'Reply-to address for support conversations.' },
-  { key: 'content.max_post_media_mb', label: 'Max media size (MB)', description: 'Upper limit for a single upload.', numeric: true, max: 500 },
-  { key: 'content.max_caption_chars', label: 'Max caption characters', description: 'Longest caption accepted on a post.', numeric: true, max: 10000 },
+  { key: 'general.platform_name', label: 'Platform name', description: 'Shown in headers, emails and public metadata.', category: 'general', kind: 'text' },
+  { key: 'general.description', label: 'Platform description', description: 'Short summary used in share previews.', category: 'general', kind: 'text' },
+  { key: 'moderation.require_review_for_media', label: 'Review every media change', description: 'Return edited posts to pending review when their media changes.', category: 'moderation', kind: 'boolean' },
+  { key: 'moderation.auto_flag_threshold', label: 'Auto-flag threshold', description: 'Risk score at which new content is prioritised for review (0–100).', category: 'moderation', kind: 'number', min: 0, max: 100 },
+  { key: 'notifications.announcements_enabled', label: 'Announcements enabled', description: 'Allow staff to publish announcements to members.', category: 'notifications', kind: 'boolean' },
+  { key: 'notifications.daily_digest', label: 'Daily digest', description: 'Send the daily activity digest to opted-in members.', category: 'notifications', kind: 'boolean' },
+  { key: 'security.require_2fa_for_admins', label: 'Require 2FA for staff', description: 'Recorded staff security policy; enforce in Supabase Auth settings.', category: 'security', kind: 'boolean' },
+  { key: 'security.session_timeout_minutes', label: 'Session timeout (minutes)', description: 'Maximum idle session lifetime (15–10080).', category: 'security', kind: 'number', min: 15, max: 10080 },
+  { key: 'security.max_login_attempts', label: 'Login attempt limit', description: 'Failed attempts before a cooldown (3–20).', category: 'security', kind: 'number', min: 3, max: 20 },
+  { key: 'support.contact_email', label: 'Support email', description: 'Reply-to address for support conversations.', category: 'support', kind: 'text' },
+  { key: 'support.business_hours', label: 'Business hours', description: 'Shown in support replies and the help centre.', category: 'support', kind: 'text' },
+  { key: 'support.sla_first_response_hours', label: 'First response SLA (hours)', description: 'Target time to the first staff reply (1–720).', category: 'support', kind: 'number', min: 1, max: 720 },
+  { key: 'support.sla_resolution_hours', label: 'Resolution SLA (hours)', description: 'Target time to resolve a ticket (1–720).', category: 'support', kind: 'number', min: 1, max: 720 },
+  { key: 'content.max_post_media_mb', label: 'Max media size (MB)', description: 'Upper limit for a single upload (1–200).', category: 'general', kind: 'number', min: 1, max: 200 },
+  { key: 'content.max_caption_chars', label: 'Max caption characters', description: 'Longest caption accepted on a post (100–5000).', category: 'general', kind: 'number', min: 100, max: 5000 },
+];
+
+const SETTING_TABS: { key: SettingCategory; label: string }[] = [
+  { key: 'general', label: 'General' },
+  { key: 'moderation', label: 'Moderation' },
+  { key: 'notifications', label: 'Notifications' },
+  { key: 'security', label: 'Security' },
+  { key: 'support', label: 'Support' },
 ];
 
 type HelpDraft = {
@@ -38,6 +66,7 @@ const EMPTY_DRAFT: HelpDraft = {
 
 function asText(value: unknown): string {
   if (value === null || value === undefined) return '';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
   return String(value);
 }
 
@@ -53,6 +82,7 @@ export default function AdminSettingsScreen() {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [help, setHelp] = useState<HelpContent>({ categories: [], articles: [], faqs: [] });
   const [helpLoading, setHelpLoading] = useState(false);
+  const [helpError, setHelpError] = useState<string | null>(null);
   const [draft, setDraft] = useState<HelpDraft | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<HelpDraft | null>(null);
   const [savingHelp, setSavingHelp] = useState(false);
@@ -74,10 +104,13 @@ export default function AdminSettingsScreen() {
 
   const loadHelp = useCallback(async () => {
     setHelpLoading(true);
+    setHelpError(null);
     try {
       setHelp(await adminApi.listHelp());
     } catch (caught) {
-      toast.show(friendlyError(caught), 'error');
+      const message = friendlyError(caught);
+      setHelpError(message);
+      toast.show(message, 'error');
     } finally {
       setHelpLoading(false);
     }
@@ -98,10 +131,15 @@ export default function AdminSettingsScreen() {
     const raw = (drafts[definition.key] ?? '').trim();
     if (!raw) { toast.show('Enter a value before saving.', 'error'); return; }
     let value: unknown = raw;
-    if (definition.numeric) {
+    if (definition.kind === 'boolean') {
+      if (raw !== 'true' && raw !== 'false') { toast.show('Choose true or false.', 'error'); return; }
+      value = raw === 'true';
+    } else if (definition.kind === 'number') {
       const parsed = Number(raw);
-      if (!Number.isInteger(parsed) || parsed < 1 || (definition.max && parsed > definition.max)) {
-        toast.show(`Enter a whole number between 1 and ${definition.max ?? 'a safe limit'}.`, 'error');
+      const min = definition.min ?? 1;
+      const max = definition.max ?? 10000;
+      if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+        toast.show(`Enter a whole number between ${min} and ${max}.`, 'error');
         return;
       }
       value = parsed;
@@ -175,50 +213,61 @@ export default function AdminSettingsScreen() {
     }
   };
 
-  if (!can('users.view') && !can('help.manage')) return <AdminRestricted permission="users.view or help.manage" />;
+  const canViewSettings = can('settings.view');
+  const canManageSettings = can('settings.manage');
+  const canHelp = can('help.manage');
+  if (!canViewSettings && !canHelp) return <AdminRestricted permission="settings.view or help.manage" />;
+
+  const tabs = [
+    ...(canViewSettings ? SETTING_TABS : []),
+    ...(canHelp ? [{ key: 'help' as const, label: 'Help centre' }] : []),
+  ];
+  const activeTab = tabs.some((item) => item.key === tab) ? tab : tabs[0].key;
 
   return (
     <AdminPage
       title="Platform Settings"
       subtitle="Review and change the settings that power the live app and its help centre."
-      actions={<ClayButton label="Refresh" variant="secondary" size="sm" icon="refresh-cw" loading={loading || helpLoading} onPress={() => { void load(); if (tab === 'help') void loadHelp(); }} />}
+      actions={<ClayButton label="Refresh" variant="secondary" size="sm" icon="refresh-cw" loading={loading || helpLoading} onPress={() => { void load(); if (activeTab === 'help') void loadHelp(); }} />}
     >
       <AdminCard>
-        <Tabs
-          items={[
-            ...(can('users.view') ? [{ key: 'general', label: 'General' }] : []),
-            ...(can('help.manage') ? [{ key: 'help', label: 'Help centre' }] : []),
-          ]}
-          active={tab}
-          onChange={setTab}
-        />
+        <Tabs items={tabs} active={activeTab} onChange={setTab} />
       </AdminCard>
 
-      {tab === 'general' ? (
+      {activeTab !== 'help' ? (
         <>
           {loading ? <LoadingCard label="Loading settings" /> : null}
           {!loading && error ? <AdminCard><Text style={[type.body, { color: colors.danger }]}>{error}</Text></AdminCard> : null}
           {!loading && !error ? (
             <AdminCard>
-              {SETTINGS.map((definition) => (
+              {SETTINGS.filter((definition) => definition.category === activeTab).map((definition) => (
                 <View key={definition.key} style={{ borderBottomWidth: 1, borderBottomColor: colors.line, paddingVertical: 14, gap: 8 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                     <View style={{ flex: 1 }}>
                       <Text style={[type.smallMedium, { color: colors.ink }]}>{definition.label}</Text>
                       <Text style={[type.tiny, { color: colors.muted }]}>{definition.description}</Text>
                     </View>
-                    {can('settings.manage') ? (
+                    {canManageSettings ? (
                       <ClayButton label="Save" size="sm" loading={savingKey === definition.key} onPress={() => void saveSetting(definition)} />
                     ) : <StatusBadge status="draft" />}
                   </View>
-                  <ClayInput
-                    value={drafts[definition.key] ?? ''}
-                    onChangeText={(value) => setDrafts((current) => ({ ...current, [definition.key]: value }))}
-                    placeholder={asText(settings[definition.key]) || 'Not set'}
-                    editable={can('settings.manage')}
-                    keyboardType={definition.numeric ? 'number-pad' : 'default'}
-                    multiline={definition.key === 'general.description'}
-                  />
+                  {definition.kind === 'boolean' ? (
+                    <Select
+                      label="Value"
+                      value={drafts[definition.key] || asText(settings[definition.key]) || 'false'}
+                      options={[{ label: 'Enabled', value: 'true' }, { label: 'Disabled', value: 'false' }]}
+                      onValueChange={(value) => setDrafts((current) => ({ ...current, [definition.key]: value }))}
+                    />
+                  ) : (
+                    <ClayInput
+                      value={drafts[definition.key] ?? ''}
+                      onChangeText={(value) => setDrafts((current) => ({ ...current, [definition.key]: value }))}
+                      placeholder={asText(settings[definition.key]) || 'Not set'}
+                      editable={canManageSettings}
+                      keyboardType={definition.kind === 'number' ? 'number-pad' : 'default'}
+                      multiline={definition.key === 'general.description'}
+                    />
+                  )}
                   <Text style={[type.tiny, { color: colors.muted }]}>Database key: {definition.key} · stored value: {truncate(asText(settings[definition.key]) || 'none', 80)}</Text>
                 </View>
               ))}
@@ -227,7 +276,7 @@ export default function AdminSettingsScreen() {
         </>
       ) : null}
 
-      {tab === 'help' && can('help.manage') ? (
+      {activeTab === 'help' && canHelp ? (
         <>
           <AdminCard>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -237,6 +286,9 @@ export default function AdminSettingsScreen() {
             </View>
           </AdminCard>
           {helpLoading ? <LoadingCard label="Loading help content" /> : null}
+          {!helpLoading && helpError ? <AdminCard><Text style={[type.body, { color: colors.danger }]}>{helpError}</Text></AdminCard> : null}
+          {!helpLoading && !helpError ? (
+          <>
           <AdminCard>
             <Text style={[type.h3, { color: colors.ink }]}>Categories ({help.categories.length})</Text>
             {help.categories.length === 0 ? <Text style={[type.small, { color: colors.muted }]}>No categories yet.</Text> : null}
@@ -283,6 +335,8 @@ export default function AdminSettingsScreen() {
               </View>
             ))}
           </AdminCard>
+        </>
+          ) : null}
         </>
       ) : null}
 

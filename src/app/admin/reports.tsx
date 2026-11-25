@@ -1,7 +1,7 @@
 import { adminPageMetadata } from '../../lib/seo';
 import { useCallback, useEffect, useState } from 'react';
 import { Image, ScrollView, Text, View } from 'react-native';
-import { ClayButton, ClayInput, Dropdown, ModalCard, SearchField, Select, useToast } from '../../components/ui';
+import { ClayButton, ClayInput, Dropdown, ModalCard, SearchField, Select, useToast, type DropdownItem } from '../../components/ui';
 import { useAdmin } from '../../components/admin/AdminProvider';
 import {
   AdminCard,
@@ -29,10 +29,9 @@ import {
 import { useTheme } from '../../theme/theme';
 
 const PAGE_SIZE = 25;
-type ReportAction = 'decide' | 'warn_user' | 'suspend_user' | 'remove_content' | 'assign' | 'priority' | 'category';
+type ReportAction = 'decide' | 'note' | 'warn_user' | 'suspend_user' | 'remove_content' | 'assign' | 'priority' | 'category';
 const CATEGORIES = ['inappropriate', 'harassment', 'spam', 'fake_account', 'impersonation', 'copyright', 'other'];
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
-const DECISIONS = ['reviewing', 'resolved', 'dismissed', 'escalated'];
 
 export default function AdminReportsScreen() {
   const { can } = useAdmin();
@@ -52,6 +51,7 @@ export default function AdminReportsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminReportDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [assignees, setAssignees] = useState<AdminAssignee[]>([]);
   const [pending, setPending] = useState<{ report: AdminReport; action: ReportAction; value: string | null } | null>(null);
   const [reason, setReason] = useState('');
@@ -70,8 +70,8 @@ export default function AdminReportsScreen() {
     if (!can('reports.view')) return;
     void adminApi.listAssignees()
       .then((result) => setAssignees(result.items ?? []))
-      .catch(() => setAssignees([]));
-  }, [can]);
+      .catch((caught) => toast.show(`Could not load assignees: ${friendlyError(caught)}`, 'error'));
+  }, [can, toast]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -106,6 +106,7 @@ export default function AdminReportsScreen() {
   const openDetail = async (report: AdminReport) => {
     setDetailLoading(true);
     setDetail(null);
+    setDetailError(null);
     setMediaUrl(null);
     try {
       const data = await adminApi.getReport(report.id);
@@ -116,7 +117,9 @@ export default function AdminReportsScreen() {
         setMediaUrl(urls[mediaKey] ?? null);
       }
     } catch (caught) {
-      toast.show(friendlyError(caught), 'error');
+      const message = friendlyError(caught);
+      setDetailError(message);
+      toast.show(message, 'error');
     } finally {
       setDetailLoading(false);
     }
@@ -142,7 +145,8 @@ export default function AdminReportsScreen() {
       setPending(null);
       void load();
       if (detail) {
-        try { setDetail(await adminApi.getReport(detail.report.id)); } catch { /* keep previous detail */ }
+        try { setDetail(await adminApi.getReport(detail.report.id)); }
+        catch (caught) { toast.show(`Report updated, but details could not refresh: ${friendlyError(caught)}`, 'error'); }
       }
     } catch (caught) {
       toast.show(friendlyError(caught), 'error');
@@ -154,10 +158,16 @@ export default function AdminReportsScreen() {
   if (!can('reports.view')) return <AdminRestricted permission="reports.view" />;
 
   const destructive = pending?.action === 'suspend_user' || pending?.action === 'remove_content';
-  const requireReason = destructive || pending?.action === 'warn_user' || pending?.action === 'decide';
+  const requireReason = destructive || pending?.action === 'warn_user' || pending?.action === 'decide' || pending?.action === 'note';
   const reportStatus = detail ? String((detail.report as Record<string, unknown>).status ?? 'open') : '';
   const hasReportedUser = Boolean(detail && (detail.reported_user as Record<string, unknown>).id);
   const hasContent = Boolean(detail && (detail.content as Record<string, unknown>).id);
+  const canReview = can('reports.review') || can('reports.manage');
+  const canManage = can('reports.manage');
+  const canResolve = can('reports.resolve');
+  const canEscalate = can('reports.escalate');
+  const canWarn = can('users.suspend');
+  const canRemoveContent = can('posts.delete');
 
   return (
     <AdminPage
@@ -206,15 +216,24 @@ export default function AdminReportsScreen() {
               { key: 'date', label: 'Reported', width: 150, render: (row) => <Text style={[type.small, { color: colors.muted }]}>{formatDateTime(row.created_at)}</Text> },
               {
                 key: 'actions', label: 'Actions', width: 140,
-                render: (row) => can('reports.manage') ? (
-                  <Dropdown label="Report actions" items={[
+                render: (row) => {
+                  const items: DropdownItem[] = [
                     { key: 'review', label: 'Open review', icon: 'eye', onPress: () => void openDetail(row) },
-                    { key: 'reviewing', label: 'Mark reviewing', icon: 'clock', onPress: () => startAction(row, 'decide', 'reviewing') },
-                    { key: 'resolved', label: 'Resolve', icon: 'check-circle', onPress: () => startAction(row, 'decide', 'resolved') },
-                    { key: 'dismissed', label: 'Dismiss', icon: 'x-circle', onPress: () => startAction(row, 'decide', 'dismissed') },
-                    { key: 'escalated', label: 'Escalate', icon: 'arrow-up', onPress: () => startAction(row, 'decide', 'escalated') },
-                  ]} />
-                ) : <Text style={[type.small, { color: colors.muted }]}>View only</Text>,
+                  ];
+                  if (can('reports.review') || can('reports.manage')) {
+                    items.push({ key: 'reviewing', label: 'Mark reviewing', icon: 'clock', onPress: () => startAction(row, 'decide', 'reviewing') });
+                  }
+                  if (can('reports.resolve')) {
+                    items.push(
+                      { key: 'resolved', label: 'Resolve', icon: 'check-circle', onPress: () => startAction(row, 'decide', 'resolved') },
+                      { key: 'dismissed', label: 'Dismiss', icon: 'x-circle', onPress: () => startAction(row, 'decide', 'dismissed') },
+                    );
+                  }
+                  if (can('reports.escalate')) {
+                    items.push({ key: 'escalated', label: 'Escalate', icon: 'arrow-up', onPress: () => startAction(row, 'decide', 'escalated') });
+                  }
+                  return <Dropdown label="Report actions" items={items} />;
+                },
               },
             ]}
             rows={rows}
@@ -226,8 +245,9 @@ export default function AdminReportsScreen() {
         </AdminCard>
       ) : null}
 
-      <ModalCard visible={detailLoading || Boolean(detail)} onClose={() => setDetail(null)} width={820}>
-        {detailLoading ? <Text style={[type.h3, { color: colors.ink }]}>Loading report…</Text> : null}
+      <ModalCard visible={detailLoading || Boolean(detail) || Boolean(detailError)} onClose={() => { setDetail(null); setDetailError(null); }} width={820}>
+        {detailLoading ? <LoadingCard label="Loading report" /> : null}
+        {!detailLoading && detailError ? <AdminCard><Text style={[type.body, { color: colors.danger }]}>{detailError}</Text></AdminCard> : null}
         {detail ? (
           <View style={{ maxHeight: '84%' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
@@ -246,43 +266,72 @@ export default function AdminReportsScreen() {
               {mediaUrl ? (
                 <Image source={{ uri: mediaUrl }} style={{ width: '100%', height: 200, borderRadius: 14, backgroundColor: colors.backgroundAlt, marginVertical: 10 }} resizeMode="contain" />
               ) : null}
-              {can('reports.manage') ? (
+              {canReview || canManage || canResolve || canEscalate || canWarn || canRemoveContent ? (
                 <View style={{ gap: 10, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.line }}>
-                  <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
-                    <View style={{ minWidth: 180, flex: 1 }}>
-                      <Select
-                        label="Assign to"
-                        value={String((detail.report as Record<string, unknown>).assigned_to ?? '') || null}
-                        options={[{ label: 'Unassigned', value: '' }, ...assignees.map((person) => ({ label: `${person.display_name} (${titleCase(person.role)})`, value: person.user_id }))]}
-                        onValueChange={(next) => startAction(detail.report, 'assign', next || null)}
-                      />
+                  {canManage ? (
+                    <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+                      <View style={{ minWidth: 180, flex: 1 }}>
+                        <Select
+                          label="Assign to"
+                          value={String((detail.report as Record<string, unknown>).assigned_to ?? '') || null}
+                          options={[{ label: 'Unassigned', value: '' }, ...assignees.map((person) => ({ label: `${person.display_name} (${titleCase(person.role)})`, value: person.user_id }))]}
+                          onValueChange={(next) => startAction(detail.report, 'assign', next || null)}
+                        />
+                      </View>
+                      <View style={{ minWidth: 150, flex: 1 }}>
+                        <Select label="Priority" value={String((detail.report as Record<string, unknown>).priority ?? 'normal')} options={PRIORITIES.map((item) => ({ label: titleCase(item), value: item }))} onValueChange={(next) => startAction(detail.report, 'priority', next)} />
+                      </View>
                     </View>
-                    <View style={{ minWidth: 150, flex: 1 }}>
-                      <Select label="Priority" value={String((detail.report as Record<string, unknown>).priority ?? 'normal')} options={PRIORITIES.map((item) => ({ label: titleCase(item), value: item }))} onValueChange={(next) => startAction(detail.report, 'priority', next)} />
-                    </View>
-                  </View>
-                  <Select label="Category" value={String((detail.report as Record<string, unknown>).category ?? 'other')} options={CATEGORIES.map((item) => ({ label: titleCase(item), value: item }))} onValueChange={(next) => startAction(detail.report, 'category', next)} />
-                  <Text style={[type.tiny, { color: colors.muted }]}>Decision</Text>
-                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                    {DECISIONS.map((decision) => (
-                      <ClayButton key={decision} label={titleCase(decision)} size="sm" variant={decision === 'dismissed' ? 'danger' : 'secondary'} onPress={() => startAction(detail.report, 'decide', decision)} />
-                    ))}
-                  </View>
-                  <Text style={[type.tiny, { color: colors.muted }]}>Linked actions</Text>
-                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                    <ClayButton label="Warn user" size="sm" variant="outline" icon="alert-triangle" disabled={!hasReportedUser || !can('users.suspend')} onPress={() => startAction(detail.report, 'warn_user')} />
-                    <ClayButton label="Suspend user" size="sm" variant="danger" icon="slash" disabled={!hasReportedUser || !can('users.suspend')} onPress={() => startAction(detail.report, 'suspend_user')} />
-                    <ClayButton label="Remove content" size="sm" variant="destructive" icon="trash-2" disabled={!hasContent || !can('posts.manage')} onPress={() => startAction(detail.report, 'remove_content')} />
-                  </View>
+                  ) : null}
+                  {canManage ? (
+                    <Select label="Category" value={String((detail.report as Record<string, unknown>).category ?? 'other')} options={CATEGORIES.map((item) => ({ label: titleCase(item), value: item }))} onValueChange={(next) => startAction(detail.report, 'category', next)} />
+                  ) : null}
+                  {canReview ? (
+                    <ClayButton label="Add internal note" size="sm" variant="outline" icon="edit-3" onPress={() => startAction(detail.report, 'note')} />
+                  ) : null}
+                  {canReview || canResolve || canEscalate ? (
+                    <>
+                      <Text style={[type.tiny, { color: colors.muted }]}>Decision</Text>
+                      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                        {canReview ? <ClayButton label="Mark reviewing" size="sm" variant="secondary" onPress={() => startAction(detail.report, 'decide', 'reviewing')} /> : null}
+                        {canResolve ? (
+                          <>
+                            <ClayButton label="Resolve" size="sm" variant="secondary" onPress={() => startAction(detail.report, 'decide', 'resolved')} />
+                            <ClayButton label="Dismiss" size="sm" variant="danger" onPress={() => startAction(detail.report, 'decide', 'dismissed')} />
+                          </>
+                        ) : null}
+                        {canEscalate ? <ClayButton label="Escalate" size="sm" variant="outline" icon="arrow-up" onPress={() => startAction(detail.report, 'decide', 'escalated')} /> : null}
+                      </View>
+                    </>
+                  ) : null}
+                  {canWarn || canRemoveContent ? (
+                    <>
+                      <Text style={[type.tiny, { color: colors.muted }]}>Linked actions</Text>
+                      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                        {canWarn ? <ClayButton label="Warn user" size="sm" variant="outline" icon="alert-triangle" disabled={!hasReportedUser} onPress={() => startAction(detail.report, 'warn_user')} /> : null}
+                        {canWarn ? <ClayButton label="Suspend user" size="sm" variant="danger" icon="slash" disabled={!hasReportedUser} onPress={() => startAction(detail.report, 'suspend_user')} /> : null}
+                        {canRemoveContent ? <ClayButton label="Remove content" size="sm" variant="destructive" icon="trash-2" disabled={!hasContent} onPress={() => startAction(detail.report, 'remove_content')} /> : null}
+                      </View>
+                    </>
+                  ) : null}
                 </View>
               ) : null}
               <View style={{ marginTop: 14 }}>
                 <Text style={[type.h3, { color: colors.ink, marginBottom: 8 }]}>Moderation history</Text>
-                {detail.notes.length === 0 ? <Text style={[type.small, { color: colors.muted }]}>No prior admin notes.</Text> : null}
+                {detail.notes.length === 0 ? <Text style={[type.small, { color: colors.muted }]}>No prior moderation actions or notes.</Text> : null}
                 {detail.notes.map((note, index) => (
-                  <View key={String(note.id ?? index)} style={{ borderBottomWidth: 1, borderBottomColor: colors.line, paddingVertical: 8 }}>
-                    <Text style={[type.smallMedium, { color: colors.ink }]}>{titleCase(String(note.action ?? ''))}</Text>
-                    <Text style={[type.tiny, { color: colors.muted }]}>{formatDateTime(String(note.created_at ?? ''))}</Text>
+                  <View key={String(note.id ?? index)} style={{ borderBottomWidth: 1, borderBottomColor: colors.line, paddingVertical: 8, gap: 3 }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10 }}>
+                      <Text style={[type.smallMedium, { color: colors.ink }]}>{titleCase(String(note.action ?? ''))}</Text>
+                      <Text style={[type.tiny, { color: colors.muted }]}>{formatDateTime(String(note.created_at ?? ''))}</Text>
+                    </View>
+                    {note.actor_username ? <Text style={[type.tiny, { color: colors.muted }]}>By @{String(note.actor_username)}</Text> : null}
+                    {typeof note.changes?.note === 'string' && note.changes.note ? (
+                      <Text style={[type.small, { color: colors.inkSoft }]}>{truncate(note.changes.note, 400)}</Text>
+                    ) : null}
+                    {typeof note.changes?.value === 'string' && note.changes.value ? (
+                      <Text style={[type.tiny, { color: colors.muted }]}>Value: {titleCase(note.changes.value)}</Text>
+                    ) : null}
                   </View>
                 ))}
               </View>
@@ -294,13 +343,19 @@ export default function AdminReportsScreen() {
       <ReasonDialog
         visible={Boolean(pending)}
         title={pending?.action === 'assign' ? 'Assign report' : `${titleCase(pending?.action ?? '')} report`}
-        message={destructive ? 'This is a high-impact moderation action. The reason will be saved to the audit log.' : 'Confirm this report update. Your note is saved to the audit log.'}
-        confirmLabel={destructive ? 'Apply action' : 'Update report'}
+        message={pending?.action === 'note'
+          ? 'Save context for other staff. This note does not change the report verdict.'
+          : destructive
+            ? 'This is a high-impact moderation action. The reason will be saved to the audit log.'
+            : 'Confirm this report update. Your note is saved to the audit log.'}
+        confirmLabel={pending?.action === 'note' ? 'Save note' : destructive ? 'Apply action' : 'Update report'}
         destructive={destructive}
         loading={saving}
         reason={reason}
         onReasonChange={setReason}
         requireReason={requireReason}
+        reasonLabel={pending?.action === 'note' ? 'Internal note' : undefined}
+        reasonPlaceholder={pending?.action === 'note' ? 'Add context for the moderation team' : undefined}
         onConfirm={() => void confirmAction()}
         onCancel={() => setPending(null)}
       />

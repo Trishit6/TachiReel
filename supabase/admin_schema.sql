@@ -6,7 +6,8 @@
  * admin role in Postgres. The browser never receives a service-role key and
  * cannot grant itself a role.
  *
- * Bootstrap the first Super Admin with the SQL at the bottom of this file.
+ * Bootstrap the first Super Admin with the server-side process documented at
+ * the bottom of this file.
  * =========================================================================== */
 
 create extension if not exists pgcrypto;
@@ -51,6 +52,17 @@ alter table public.admin_roles enable row level security;
 
 create schema if not exists private;
 grant usage on schema private to authenticated;
+
+-- This file defines the base four-role RBAC. Re-applying it on top of
+-- admin_rbac_v2.sql would silently replace the v2 permission functions and
+-- remove custom roles/protections, so fail loudly instead. On an upgraded
+-- database, apply v2 again after this file if a full refresh is needed.
+do $$
+begin
+  if to_regprocedure('private.admin_rbac_v2_installed()') is not null then
+    raise exception 'admin_rbac_v2.sql is already installed. Do not re-apply the base admin_schema.sql alone; re-apply admin_rbac_v2.sql afterwards.';
+  end if;
+end $$;
 
 create table if not exists private.admin_rate_limits (
   actor_id uuid not null,
@@ -104,11 +116,36 @@ as $$
   select exists (
     select 1
     from public.admin_roles r
+    join public.profiles p on p.id = r.user_id and p.account_status = 'active'
     where r.user_id = auth.uid()
       and r.is_active
       and p_permission = any (private.admin_permissions_for_role(r.role))
   );
 $$;
+
+-- Identifies the official initial Super Admin by email for protection only.
+-- Privileges still come exclusively from the verified admin_roles row written
+-- by the server-side seed script. admin_rbac_v2.sql re-creates this identically.
+create or replace function private.is_bootstrap_super_admin(p_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select exists (
+    select 1
+    from public.admin_roles r
+    join auth.users u on u.id = r.user_id
+    where r.user_id = p_user_id
+      and r.role = 'super_admin'
+      and lower(coalesce(u.email, '')) = 'admin@admin.com'
+  );
+$$;
+
+revoke all on function private.is_bootstrap_super_admin(uuid) from public;
+revoke all on function private.is_bootstrap_super_admin(uuid) from anon;
+revoke all on function private.is_bootstrap_super_admin(uuid) from authenticated;
 
 create or replace function private.require_admin_permission(p_permission text)
 returns void
@@ -397,6 +434,80 @@ create index if not exists support_tickets_priority_idx on public.support_ticket
 create index if not exists posts_featured_idx on public.posts(is_featured, media_type, created_at desc);
 create index if not exists comments_moderation_idx on public.comments(moderation_status, created_at desc);
 
+-- Harden the base RLS policies for existing databases. Fresh databases get the
+-- same definitions from schema.sql; these re-creations keep upgrades identical.
+drop policy if exists "active users can create own posts" on public.posts;
+create policy "active users can create own posts" on public.posts for insert to authenticated with check (
+  author_id = auth.uid()
+  and sensitive_review_status = 'pending'
+  and exists (select 1 from public.profiles p where p.id = auth.uid() and p.account_status = 'active' and (not p.is_minor or p.guardian_consent_status = 'verified'))
+);
+
+drop policy if exists "users can read comments on readable posts" on public.comments;
+create policy "users can read comments on readable posts" on public.comments for select to authenticated using (
+  moderation_status = 'visible'
+  and exists (
+    select 1 from public.posts p
+    where p.id = post_id
+      and p.sensitive_review_status = 'safe'
+      and (
+        p.author_id = auth.uid()
+        or (p.visibility = 'public' and exists (
+          select 1 from public.profiles author where author.id = p.author_id
+            and author.account_status = 'active'
+            and (not author.is_minor or author.guardian_consent_status = 'verified')
+        ))
+        or (p.visibility = 'followers' and exists (
+          select 1 from public.follows f where f.follower_id = auth.uid() and f.followed_id = p.author_id and f.status = 'accepted'
+        ))
+      )
+  )
+);
+
+drop policy if exists "users can read likes on readable posts" on public.post_likes;
+create policy "users can read likes on readable posts" on public.post_likes for select to authenticated using (
+  exists (
+    select 1 from public.posts p
+    where p.id = post_id
+      and p.sensitive_review_status = 'safe'
+      and (
+        p.author_id = auth.uid()
+        or (p.visibility = 'public' and exists (
+          select 1 from public.profiles author where author.id = p.author_id
+            and author.account_status = 'active'
+            and (not author.is_minor or author.guardian_consent_status = 'verified')
+        ))
+        or (p.visibility = 'followers' and exists (
+          select 1 from public.follows f where f.follower_id = auth.uid() and f.followed_id = p.author_id and f.status = 'accepted'
+        ))
+      )
+  )
+);
+
+drop policy if exists "users can read post media for reviewed posts" on storage.objects;
+drop policy if exists "users can read post media for visible reviewed posts" on storage.objects;
+create policy "users can read post media for visible reviewed posts" on storage.objects for select to authenticated using (
+  bucket_id = 'post-media' and exists (
+    select 1
+    from public.posts p
+    join public.profiles viewer on viewer.id = auth.uid() and viewer.account_status = 'active'
+    where p.media_key = storage.objects.name
+      and p.sensitive_review_status = 'safe'
+      and (
+        p.author_id = auth.uid()
+        or (p.visibility = 'public' and exists (
+          select 1 from public.profiles author
+          where author.id = p.author_id and author.account_status = 'active'
+            and (not author.is_minor or author.guardian_consent_status = 'verified')
+        ))
+        or (p.visibility = 'followers' and exists (
+          select 1 from public.follows f
+          where f.follower_id = auth.uid() and f.followed_id = p.author_id and f.status = 'accepted'
+        ))
+      )
+  )
+);
+
 -- Admins must be able to preview private media for moderation. User policies stay intact.
 drop policy if exists "admins can read post media" on storage.objects;
 create policy "admins can read post media" on storage.objects for select to authenticated
@@ -417,6 +528,21 @@ language plpgsql
 set search_path = ''
 as $$
 begin
+  if tg_op = 'INSERT' then
+    -- Clients must never create an already-approved or featured post. The
+    -- service role (auth.uid() is null) is the only exception, for migrations
+    -- and server-side tooling.
+    if auth.uid() is not null and not private.has_admin_permission('posts.manage') then
+      if coalesce(new.sensitive_review_status, 'pending') <> 'pending' then
+        raise exception 'New posts must start in pending review';
+      end if;
+      if coalesce(new.is_featured, false) then
+        raise exception 'Featured status can only be changed by authorized administrators';
+      end if;
+    end if;
+    return new;
+  end if;
+
   if auth.uid() is not null
      and new.sensitive_review_status is distinct from old.sensitive_review_status
      and not private.has_admin_permission('posts.manage') then
@@ -427,9 +553,21 @@ begin
      and not private.has_admin_permission('reelyx.manage') then
     raise exception 'Featured status can only be changed by authorized administrators';
   end if;
+  if auth.uid() is not null
+     and not private.has_admin_permission('posts.manage')
+     and (new.media_key is distinct from old.media_key or new.thumbnail_key is distinct from old.thumbnail_key) then
+    -- Swapping the media under an approved post requires a fresh review.
+    new.sensitive_review_status := 'pending';
+    new.is_featured := false;
+  end if;
   return new;
 end;
 $$;
+
+drop trigger if exists protect_post_review_fields_before_insert on public.posts;
+create trigger protect_post_review_fields_before_insert
+  before insert on public.posts
+  for each row execute procedure public.protect_post_review_fields();
 
 drop trigger if exists protect_post_review_fields_before_update on public.posts;
 create trigger protect_post_review_fields_before_update
@@ -502,19 +640,19 @@ as $$
       )
     union all
     select
-      gen_random_uuid(), 'follow'::text, 'New follower'::text,
-      actor.display_name || ' started following you.'::text,
+      gen_random_uuid(), 'follow'::text, 'Follow request'::text,
+      actor.display_name || ' wants to follow you. Review it on your profile.'::text,
       actor.id, actor.display_name, actor.username, actor.avatar_url,
       null::uuid, null::text, null::text, f.created_at
     from public.follows f
     join public.profiles actor on actor.id = f.follower_id
     where f.followed_id = (select id from me)
-      and f.status = 'accepted'
+      and f.status = 'pending'
       and f.follower_id <> (select id from me)
       and not exists (
         select 1 from public.blocks b
         where (b.blocker_id = f.followed_id and b.blocked_id = f.follower_id)
-           or (b.blocker_id = f.follower_id and b.blocked_id = f.follower_id)
+           or (b.blocker_id = f.follower_id and b.blocked_id = f.followed_id)
       )
     union all
     select
@@ -585,7 +723,7 @@ as $$
   from public.admin_roles r
   join public.profiles p on p.id = r.user_id
   left join auth.users u on u.id = r.user_id
-  where r.user_id = auth.uid() and r.is_active;
+  where r.user_id = auth.uid() and r.is_active and p.account_status = 'active';
 $$;
 
 create or replace function public.admin_analytics(
@@ -676,6 +814,103 @@ begin
     'tickets', coalesce((select jsonb_agg(jsonb_build_object('date', d.day, 'value', coalesce(x.value, 0)) order by d.day) from days d left join tickets_opened x on x.day = d.day), '[]'::jsonb)
   ) into v_result;
 
+  return v_result;
+end;
+$$;
+
+-- Authorized CSV/JSON export of the same real data shown in Analytics.
+create or replace function public.admin_export_analytics(
+  p_from timestamptz,
+  p_to timestamptz
+)
+returns jsonb
+language plpgsql security definer stable set search_path = ''
+as $$
+declare v_result jsonb;
+begin
+  perform private.require_admin_permission('analytics.export');
+  if p_to < p_from then
+    raise exception 'Invalid analytics range.';
+  end if;
+
+  select jsonb_build_object(
+    'generated_at', now(),
+    'range', jsonb_build_object('from', p_from, 'to', p_to),
+    'analytics', public.admin_analytics(p_from, p_to),
+    'moderation', jsonb_build_object(
+      'reports_by_status', coalesce((
+        select jsonb_object_agg(status, total) from (
+          select status::text, count(*)::int as total from public.reports
+          where created_at between p_from and p_to group by status
+        ) s
+      ), '{}'::jsonb),
+      'reports_by_priority', coalesce((
+        select jsonb_object_agg(priority, total) from (
+          select priority, count(*)::int as total from public.reports
+          where created_at between p_from and p_to group by priority
+        ) s
+      ), '{}'::jsonb),
+      'reports_by_category', coalesce((
+        select jsonb_object_agg(category, total) from (
+          select category, count(*)::int as total from public.reports
+          where created_at between p_from and p_to group by category
+        ) s
+      ), '{}'::jsonb),
+      'content_by_review_status', coalesce((
+        select jsonb_object_agg(sensitive_review_status, total) from (
+          select sensitive_review_status, count(*)::int as total from public.posts
+          where created_at between p_from and p_to group by sensitive_review_status
+        ) s
+      ), '{}'::jsonb)
+    ),
+    'support', jsonb_build_object(
+      'tickets_by_status', coalesce((
+        select jsonb_object_agg(status, total) from (
+          select status, count(*)::int as total from public.support_tickets
+          where created_at between p_from and p_to group by status
+        ) s
+      ), '{}'::jsonb),
+      'tickets_by_priority', coalesce((
+        select jsonb_object_agg(priority, total) from (
+          select priority, count(*)::int as total from public.support_tickets
+          where created_at between p_from and p_to group by priority
+        ) s
+      ), '{}'::jsonb),
+      'avg_first_response_hours', coalesce((
+        select round(avg(extract(epoch from (first_reply - t.created_at)) / 3600)::numeric, 2)
+        from (
+          select t.id, t.created_at,
+                 (select min(m.created_at) from public.support_ticket_messages m
+                  where m.ticket_id = t.id and m.author_role = 'support') as first_reply
+          from public.support_tickets t where t.created_at between p_from and p_to
+        ) t where first_reply is not null
+      ), 0),
+      'avg_resolution_hours', coalesce((
+        select round(avg(extract(epoch from (t.updated_at - t.created_at)) / 3600)::numeric, 2)
+        from public.support_tickets t
+        where t.created_at between p_from and p_to and t.status in ('resolved', 'closed')
+      ), 0)
+    ),
+    'top_posts', coalesce((
+      select jsonb_agg(jsonb_build_object('id', p.id, 'caption', left(p.caption, 120), 'likes', p.likes) order by p.likes desc)
+      from (
+        select p.id, p.caption, (select count(*)::int from public.post_likes l where l.post_id = p.id) as likes
+        from public.posts p where p.media_type = 'photo' and p.created_at between p_from and p_to
+        order by likes desc limit 10
+      ) p
+    ), '[]'::jsonb),
+    'top_reelyx', coalesce((
+      select jsonb_agg(jsonb_build_object('id', p.id, 'caption', left(p.caption, 120), 'likes', p.likes) order by p.likes desc)
+      from (
+        select p.id, p.caption, (select count(*)::int from public.post_likes l where l.post_id = p.id) as likes
+        from public.posts p where p.media_type = 'video' and p.created_at between p_from and p_to
+        order by likes desc limit 10
+      ) p
+    ), '[]'::jsonb)
+  ) into v_result;
+
+  perform private.write_admin_audit('analytics.export', 'analytics', null,
+    jsonb_build_object('from', p_from, 'to', p_to));
   return v_result;
 end;
 $$;
@@ -807,32 +1042,36 @@ begin
       and (p_from is null or p.created_at >= p_from)
       and (p_to is null or p.created_at <= p_to)
   ), counted as (select count(*) as total from filtered)
-  select total into v_total from counted;
-
-  select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) into v_items
-  from (
-    select * from filtered
-    order by
-      case when p_dir = 'asc' then
-        case p_sort
-          when 'name' then lower(display_name)
-          when 'username' then lower(username)
-          when 'email' then lower(coalesce(email, ''))
-          when 'status' then account_status
-          else created_at::text
-        end
-      end asc nulls last,
-      case when p_dir = 'desc' then
-        case p_sort
-          when 'name' then lower(display_name)
-          when 'username' then lower(username)
-          when 'email' then lower(coalesce(email, ''))
-          when 'status' then account_status
-          else created_at::text
-        end
-      end desc nulls last
-    limit p_limit offset p_offset
-  ) x;
+  select
+    counted.total,
+    coalesce((
+      select jsonb_agg(to_jsonb(x))
+      from (
+        select * from filtered
+        order by
+          case when p_dir = 'asc' then
+            case p_sort
+              when 'name' then lower(display_name)
+              when 'username' then lower(username)
+              when 'email' then lower(coalesce(email, ''))
+              when 'status' then account_status
+              else created_at::text
+            end
+          end asc nulls last,
+          case when p_dir = 'desc' then
+            case p_sort
+              when 'name' then lower(display_name)
+              when 'username' then lower(username)
+              when 'email' then lower(coalesce(email, ''))
+              when 'status' then account_status
+              else created_at::text
+            end
+          end desc nulls last
+        limit p_limit offset p_offset
+      ) x
+    ), '[]'::jsonb)
+  into v_total, v_items
+  from counted;
 
   return jsonb_build_object('items', v_items, 'total', v_total);
 end;
@@ -939,6 +1178,13 @@ begin
     raise exception 'You cannot change your own account from the admin panel.';
   end if;
 
+  -- An administrator with users.suspend/users.delete must not be able to
+  -- disable the protected initial Super Admin, which would also cascade away
+  -- its admin_roles row. Only the server-side seed process may change it.
+  if private.is_bootstrap_super_admin(p_user_id) then
+    raise exception 'The initial Super Admin cannot be suspended, deleted or changed from the admin panel.';
+  end if;
+
   select is_minor, guardian_consent_status, account_status::text
   into v_is_minor, v_consent, v_status
   from public.profiles where id = p_user_id;
@@ -971,6 +1217,53 @@ begin
   v_changes := v_changes || jsonb_build_object('action', p_action, 'value', p_value);
   perform private.write_admin_audit('user.' || p_action, 'user', p_user_id::text, v_changes);
   return jsonb_build_object('success', true, 'user_id', p_user_id, 'action', p_action);
+end;
+$$;
+
+-- Edit only non-safety profile fields. DOB, minor status, consent and account
+-- status remain locked behind the trigger/RPCs described in schema.sql.
+create or replace function public.admin_edit_user(
+  p_user_id uuid,
+  p_display_name text,
+  p_username text,
+  p_bio text default ''
+)
+returns jsonb
+language plpgsql security definer set search_path = ''
+as $$
+declare v_old jsonb;
+begin
+  perform private.require_admin_permission('users.edit');
+  if p_user_id = auth.uid() then
+    raise exception 'You cannot edit your own account from the admin panel.';
+  end if;
+  if private.is_bootstrap_super_admin(p_user_id) then
+    raise exception 'The initial Super Admin cannot be changed from the admin panel.';
+  end if;
+  if length(btrim(coalesce(p_display_name, ''))) not between 2 and 80 then
+    raise exception 'Display name must be between 2 and 80 characters.';
+  end if;
+  if coalesce(p_username, '') !~ '^[a-z0-9_]{3,30}$' then
+    raise exception 'Username must be 3–30 lowercase letters, numbers or underscores.';
+  end if;
+  if length(coalesce(p_bio, '')) > 300 then
+    raise exception 'Bio must be 300 characters or fewer.';
+  end if;
+
+  select jsonb_build_object('display_name', display_name, 'username', username, 'bio', bio)
+  into v_old from public.profiles where id = p_user_id;
+  if v_old is null then raise exception 'User not found.'; end if;
+
+  update public.profiles
+  set display_name = btrim(p_display_name),
+      username = lower(btrim(p_username)),
+      bio = coalesce(btrim(p_bio), ''),
+      updated_at = now()
+  where id = p_user_id;
+
+  perform private.write_admin_audit('user.edit', 'user', p_user_id::text,
+    jsonb_build_object('previous', v_old, 'display_name', btrim(p_display_name), 'username', lower(btrim(p_username))));
+  return jsonb_build_object('success', true, 'user_id', p_user_id);
 end;
 $$;
 
@@ -1047,9 +1340,14 @@ begin
         and (p_from is null or c.created_at >= p_from)
         and (p_to is null or c.created_at <= p_to)
     ), counted as (select count(*) as total from filtered)
-    select total into v_total from counted;
-    select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) into v_items
-    from (select * from filtered order by created_at desc limit p_limit offset p_offset) x;
+    select
+      counted.total,
+      coalesce((
+        select jsonb_agg(to_jsonb(x))
+        from (select * from filtered order by created_at desc limit p_limit offset p_offset) x
+      ), '[]'::jsonb)
+    into v_total, v_items
+    from counted;
   else
     with filtered as (
       select
@@ -1071,12 +1369,41 @@ begin
         and (p_from is null or p.created_at >= p_from)
         and (p_to is null or p.created_at <= p_to)
     ), counted as (select count(*) as total from filtered)
-    select total into v_total from counted;
-    select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) into v_items
-    from (select * from filtered order by created_at desc limit p_limit offset p_offset) x;
+    select
+      counted.total,
+      coalesce((
+        select jsonb_agg(to_jsonb(x))
+        from (select * from filtered order by created_at desc limit p_limit offset p_offset) x
+      ), '[]'::jsonb)
+    into v_total, v_items
+    from counted;
   end if;
 
   return jsonb_build_object('items', v_items, 'total', v_total);
+end;
+$$;
+
+create or replace function public.admin_get_content_history(p_kind text, p_id uuid)
+returns jsonb
+language plpgsql security definer stable set search_path = ''
+as $$
+declare v_items jsonb;
+begin
+  if p_kind = 'comment' then
+    perform private.require_admin_permission('comments.view');
+  elsif p_kind = 'reelyx' then
+    perform private.require_admin_permission('reelyx.view');
+  else
+    perform private.require_admin_permission('posts.view');
+  end if;
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'action', a.action, 'created_at', a.created_at,
+    'actor', p.username, 'changes', a.changes) order by a.created_at), '[]'::jsonb)
+  into v_items
+  from public.admin_audit_logs a
+  left join public.profiles p on p.id = a.actor_id
+  where a.resource = p_kind and a.resource_id = p_id::text;
+  return jsonb_build_object('items', v_items);
 end;
 $$;
 
@@ -1101,6 +1428,7 @@ begin
     select moderation_status into v_old from public.comments where id = p_id;
     if not found then raise exception 'Comment not found.'; end if;
     if p_action not in ('remove', 'restore', 'review') then raise exception 'Unknown comment action.'; end if;
+    if p_action = 'remove' then perform private.require_admin_permission('comments.delete'); end if;
     update public.comments
       set moderation_status = case p_action when 'remove' then 'removed' when 'review' then 'under_review' else 'visible' end,
           moderated_at = now(), moderated_by = auth.uid()
@@ -1110,15 +1438,20 @@ begin
     select sensitive_review_status into v_old from public.posts where id = p_id and media_type = 'video';
     if not found then raise exception 'Reelyx video not found.'; end if;
     if p_action = 'feature' then
+      perform private.require_admin_permission('reelyx.feature');
       update public.posts set is_featured = true where id = p_id;
     elsif p_action = 'unfeature' then
+      perform private.require_admin_permission('reelyx.feature');
       update public.posts set is_featured = false where id = p_id;
     elsif p_action = 'remove' then
+      perform private.require_admin_permission('posts.delete');
       update public.posts set sensitive_review_status = 'removed', removed_at = now(), removed_by = auth.uid() where id = p_id;
     elsif p_action = 'restore' then
+      perform private.require_admin_permission('posts.restore');
       update public.posts set sensitive_review_status = 'safe', removed_at = null, removed_by = null where id = p_id;
     elsif p_action = 'set_status' then
       if coalesce(p_value, '') not in ('pending', 'safe', 'mature', 'removed') then raise exception 'Invalid review status.'; end if;
+      if p_value = 'removed' then perform private.require_admin_permission('posts.delete'); end if;
       update public.posts set sensitive_review_status = p_value where id = p_id;
     else
       raise exception 'Unknown Reelyx action.';
@@ -1128,11 +1461,14 @@ begin
     select sensitive_review_status into v_old from public.posts where id = p_id and media_type = 'photo';
     if not found then raise exception 'Post not found.'; end if;
     if p_action = 'remove' then
+      perform private.require_admin_permission('posts.delete');
       update public.posts set sensitive_review_status = 'removed', removed_at = now(), removed_by = auth.uid() where id = p_id;
     elsif p_action = 'restore' then
+      perform private.require_admin_permission('posts.restore');
       update public.posts set sensitive_review_status = 'safe', removed_at = null, removed_by = null where id = p_id;
     elsif p_action = 'set_status' then
       if coalesce(p_value, '') not in ('pending', 'safe', 'mature', 'removed') then raise exception 'Invalid review status.'; end if;
+      if p_value = 'removed' then perform private.require_admin_permission('posts.delete'); end if;
       update public.posts set sensitive_review_status = p_value where id = p_id;
     else
       raise exception 'Unknown post action.';
@@ -1179,7 +1515,11 @@ begin
   with filtered as (
     select
       r.id, r.reason, r.category, r.priority, r.status::text as status,
-      r.created_at, r.updated_at, r.resolution_notes, r.assigned_to,
+      r.created_at, r.updated_at,
+      case when private.has_admin_permission('reports.review')
+                 or private.has_admin_permission('reports.manage')
+           then r.resolution_notes else '' end as resolution_notes,
+      r.assigned_to,
       reporter.username as reporter_username, reporter.display_name as reporter_name,
       reported.username as reported_username, reported.display_name as reported_name,
       reported.id as reported_user_id,
@@ -1200,11 +1540,16 @@ begin
       and (p_from is null or r.created_at >= p_from)
       and (p_to is null or r.created_at <= p_to)
   ), counted as (select count(*) as total from filtered)
-  select total into v_total from counted;
-  select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) into v_items
-  from (select * from filtered order by
-    case priority when 'urgent' then 0 when 'high' then 1 when 'normal' then 2 else 3 end,
-    created_at desc limit p_limit offset p_offset) x;
+  select
+    counted.total,
+    coalesce((
+      select jsonb_agg(to_jsonb(x))
+      from (select * from filtered order by
+        case priority when 'urgent' then 0 when 'high' then 1 when 'normal' then 2 else 3 end,
+        created_at desc limit p_limit offset p_offset) x
+    ), '[]'::jsonb)
+  into v_total, v_items
+  from counted;
 
   return jsonb_build_object('items', v_items, 'total', v_total);
 end;
@@ -1219,13 +1564,25 @@ declare
 begin
   perform private.require_admin_permission('reports.view');
   select jsonb_build_object(
-    'report', to_jsonb(r),
+    'report', (to_jsonb(r) - 'resolution_notes') || jsonb_build_object(
+      'resolution_notes', case when private.has_admin_permission('reports.review')
+                                    or private.has_admin_permission('reports.manage')
+                               then r.resolution_notes else '' end),
     'reporter', jsonb_build_object('id', reporter.id, 'username', reporter.username, 'display_name', reporter.display_name, 'avatar_url', reporter.avatar_url),
     'reported_user', jsonb_build_object('id', reported.id, 'username', reported.username, 'display_name', reported.display_name, 'avatar_url', reported.avatar_url, 'account_status', reported.account_status::text),
     'content', jsonb_build_object('id', p.id, 'caption', p.caption, 'media_type', p.media_type, 'media_key', p.media_key, 'status', p.sensitive_review_status),
     'notes', coalesce((
-      select jsonb_agg(jsonb_build_object('id', a.id, 'action', a.action, 'changes', a.changes, 'actor', a.actor_id, 'created_at', a.created_at) order by a.created_at)
-      from public.admin_audit_logs a where a.resource = 'report' and a.resource_id = p_report_id::text
+      select jsonb_agg(jsonb_build_object(
+        'id', a.id, 'action', a.action,
+        'changes', case when private.has_admin_permission('reports.review')
+                             or private.has_admin_permission('reports.manage')
+                        then a.changes else '{}'::jsonb end,
+        'actor', a.actor_id,
+        'actor_username', actor.username,
+        'created_at', a.created_at) order by a.created_at)
+      from public.admin_audit_logs a
+      left join public.profiles actor on actor.id = a.actor_id
+      where a.resource = 'report' and a.resource_id = p_report_id::text
     ), '[]'::jsonb)
   ) into v_result
   from public.reports r
@@ -1251,11 +1608,15 @@ declare
   v_report public.reports%rowtype;
   v_changes jsonb;
 begin
-  perform private.require_admin_permission('reports.manage');
+  perform private.require_admin_permission('reports.view');
   perform private.check_admin_rate_limit('admin_report_action', 40, 60);
   select * into v_report from public.reports where id = p_report_id;
   if not found then raise exception 'Report not found.'; end if;
   v_changes := jsonb_build_object('action', p_action, 'value', p_value, 'note', coalesce(p_note, ''));
+
+  if p_action in ('assign', 'priority', 'category') then
+    perform private.require_admin_permission('reports.manage');
+  end if;
 
   if p_action = 'assign' then
     update public.reports set assigned_to = p_value::uuid, updated_at = now() where id = p_report_id;
@@ -1265,13 +1626,29 @@ begin
   elsif p_action = 'category' then
     if coalesce(p_value, '') not in ('inappropriate', 'harassment', 'spam', 'fake_account', 'impersonation', 'copyright', 'other') then raise exception 'Invalid category.'; end if;
     update public.reports set category = p_value, updated_at = now() where id = p_report_id;
+  elsif p_action = 'note' then
+    -- A standalone internal note records context without changing the verdict.
+    if coalesce(trim(p_note), '') = '' then raise exception 'Write a note before saving.'; end if;
+    if not (private.has_admin_permission('reports.review') or private.has_admin_permission('reports.manage')) then
+      raise exception 'You do not have permission to add report notes.';
+    end if;
   elsif p_action = 'decide' then
     if coalesce(p_value, '') not in ('reviewing', 'resolved', 'dismissed', 'escalated') then raise exception 'Invalid decision.'; end if;
+    if p_value = 'escalated' then
+      perform private.require_admin_permission('reports.escalate');
+    elsif p_value = 'reviewing' then
+      perform private.require_admin_permission('reports.review');
+    else
+      perform private.require_admin_permission('reports.resolve');
+    end if;
     update public.reports
       set status = p_value::public.report_status, resolution_notes = coalesce(p_note, ''),
           reviewed_by = auth.uid(), updated_at = now()
       where id = p_report_id;
   elsif p_action = 'warn_user' then
+    -- Issuing a formal warning has the same effect as admin_warn_user and must
+    -- require the same permission, even when reached through a report.
+    perform private.require_admin_permission('users.suspend');
     if v_report.reported_user_id is null then raise exception 'This report has no reported user.'; end if;
     insert into public.admin_user_warnings (user_id, report_id, reason, issued_by)
     values (v_report.reported_user_id, p_report_id, p_note, auth.uid());
@@ -1281,7 +1658,7 @@ begin
     update public.profiles set account_status = 'suspended', updated_at = now() where id = v_report.reported_user_id;
   elsif p_action = 'remove_content' then
     if v_report.post_id is null then raise exception 'This report has no linked content.'; end if;
-    perform private.require_admin_permission('posts.manage');
+    perform private.require_admin_permission('posts.delete');
     update public.posts set sensitive_review_status = 'removed', removed_at = now(), removed_by = auth.uid() where id = v_report.post_id;
   else
     raise exception 'Unknown report action.';
@@ -1336,28 +1713,36 @@ begin
       and (p_category is null or p_category = '' or t.category = p_category)
       and (p_from is null or t.created_at >= p_from)
       and (p_to is null or t.created_at <= p_to)
-  ), counted as (select count(*) as total from filtered)
-  select total into v_total from counted;
-
-  select jsonb_build_object(
-    'total', (select count(*)::int from public.support_tickets),
-    'open', (select count(*)::int from public.support_tickets where status in ('open', 'in_progress', 'waiting_for_user', 'pending')),
-    'resolved', (select count(*)::int from public.support_tickets where status = 'resolved'),
-    'closed', (select count(*)::int from public.support_tickets where status = 'closed'),
-    'average_response_minutes', (
-      select coalesce(round(avg(extract(epoch from (first_reply.created_at - t.created_at)) / 60))::int, 0)
-      from public.support_tickets t
-      join lateral (
-        select m.created_at from public.support_ticket_messages m
-        where m.ticket_id = t.id and m.author_role = 'support'
-        order by m.created_at asc limit 1
-      ) first_reply on true
-      where first_reply.created_at >= t.created_at
-    )
-  ) into v_stats;
-
-  select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) into v_items
-  from (select * from filtered order by updated_at desc limit p_limit offset p_offset) x;
+  )
+  select
+    (select count(*) from filtered),
+    jsonb_build_object(
+      'total', (select count(*)::int from public.support_tickets),
+      'open', (select count(*)::int from public.support_tickets where status in ('open', 'in_progress', 'waiting_for_user', 'pending')),
+      'resolved', (select count(*)::int from public.support_tickets where status = 'resolved'),
+      'closed', (select count(*)::int from public.support_tickets where status = 'closed'),
+      'escalated', (select count(*)::int from public.support_tickets where priority = 'urgent'),
+      'resolution_rate', (
+        select case when (select count(*)::int from public.support_tickets) = 0 then 0
+          else round(100.0 * (select count(*)::int from public.support_tickets where status in ('resolved', 'closed'))
+            / (select count(*)::int from public.support_tickets), 1) end
+      ),
+      'average_response_minutes', (
+        select coalesce(round(avg(extract(epoch from (first_reply.created_at - t.created_at)) / 60))::int, 0)
+        from public.support_tickets t
+        join lateral (
+          select m.created_at from public.support_ticket_messages m
+          where m.ticket_id = t.id and m.author_role = 'support'
+          order by m.created_at asc limit 1
+        ) first_reply on true
+        where first_reply.created_at >= t.created_at
+      )
+    ),
+    coalesce((
+      select jsonb_agg(to_jsonb(x))
+      from (select * from filtered order by updated_at desc limit p_limit offset p_offset) x
+    ), '[]'::jsonb)
+  into v_total, v_stats, v_items;
 
   return jsonb_build_object('items', v_items, 'total', v_total, 'stats', v_stats);
 end;
@@ -1394,6 +1779,13 @@ begin
       select jsonb_agg(jsonb_build_object('id', att.id, 'storage_path', att.storage_path, 'file_name', att.file_name, 'content_type', att.content_type, 'byte_size', att.byte_size, 'created_at', att.created_at) order by att.created_at)
       from public.support_ticket_attachments att
       where att.ticket_id = p_ticket_id
+    ), '[]'::jsonb),
+    'history', coalesce((
+      select jsonb_agg(jsonb_build_object('action', h.action, 'created_at', h.created_at,
+                                          'actor', actor.username, 'changes', h.changes) order by h.created_at)
+      from public.admin_audit_logs h
+      left join public.profiles actor on actor.id = h.actor_id
+      where h.resource = 'ticket' and h.resource_id = p_ticket_id::text
     ), '[]'::jsonb)
   ) into v_result
   from public.support_tickets t
@@ -1425,12 +1817,16 @@ begin
   v_changes := jsonb_build_object('action', p_action, 'value', p_value, 'previous_status', v_status);
 
   if p_action = 'assign' then
+    perform private.require_admin_permission('support.assign');
     update public.support_tickets set assigned_to = nullif(p_value, '')::uuid, updated_at = now() where id = p_ticket_id;
   elsif p_action = 'priority' then
     if coalesce(p_value, '') not in ('low', 'normal', 'high', 'urgent') then raise exception 'Invalid priority.'; end if;
     update public.support_tickets set priority = p_value, updated_at = now() where id = p_ticket_id;
   elsif p_action = 'status' then
     if coalesce(p_value, '') not in ('open', 'in_progress', 'waiting_for_user', 'pending', 'resolved', 'closed') then raise exception 'Invalid status.'; end if;
+    if p_value in ('resolved', 'closed') or v_status in ('resolved', 'closed') then
+      perform private.require_admin_permission('support.resolve');
+    end if;
     update public.support_tickets set status = p_value, updated_at = now() where id = p_ticket_id;
   elsif p_action = 'reply' then
     if coalesce(trim(p_body), '') = '' then raise exception 'Write a reply before sending.'; end if;
@@ -1480,6 +1876,44 @@ begin
 end;
 $$;
 
+create or replace function public.admin_get_notification(p_notification_id uuid)
+returns jsonb
+language plpgsql security definer stable set search_path = ''
+as $$
+declare v_result jsonb;
+begin
+  perform private.require_admin_permission('notifications.view');
+  select jsonb_build_object(
+    'notification', to_jsonb(n),
+    'delivery', jsonb_build_object(
+      'recipient_count', case when n.audience = 'all'
+        then (select count(*)::int from public.profiles)
+        else coalesce(cardinality(n.target_user_ids), 0) end,
+      'delivered_count', (select count(*)::int from public.admin_notification_recipients r where r.notification_id = n.id),
+      'read_count', (select count(*)::int from public.admin_notification_recipients r where r.notification_id = n.id and r.read_at is not null),
+      'recent', coalesce((
+        select jsonb_agg(jsonb_build_object('username', p.username, 'delivered_at', r.delivered_at, 'read_at', r.read_at)
+          order by r.delivered_at desc)
+        from (
+          select user_id, delivered_at, read_at from public.admin_notification_recipients
+          where notification_id = n.id order by delivered_at desc limit 25
+        ) r left join public.profiles p on p.id = r.user_id
+      ), '[]'::jsonb)
+    ),
+    'history', coalesce((
+      select jsonb_agg(jsonb_build_object('action', a.action, 'created_at', a.created_at, 'actor', p.username) order by a.created_at)
+      from public.admin_audit_logs a
+      left join public.profiles p on p.id = a.actor_id
+      where a.resource = 'notification' and a.resource_id = n.id::text
+    ), '[]'::jsonb)
+  ) into v_result
+  from public.admin_notifications n
+  where n.id = p_notification_id;
+  if v_result is null then raise exception 'Notification not found.'; end if;
+  return v_result;
+end;
+$$;
+
 create or replace function public.admin_send_notification(p_notification_id uuid)
 returns jsonb
 language plpgsql security definer set search_path = ''
@@ -1488,6 +1922,7 @@ declare
   v_notification public.admin_notifications%rowtype;
 begin
   perform private.require_admin_permission('notifications.manage');
+  perform private.require_admin_permission('notifications.send');
   perform private.check_admin_rate_limit('admin_send_notification', 10, 300);
   select * into v_notification from public.admin_notifications where id = p_notification_id;
   if not found then raise exception 'Notification not found.'; end if;
@@ -1527,6 +1962,7 @@ declare
   v_id uuid;
 begin
   perform private.require_admin_permission('notifications.manage');
+  perform private.require_admin_permission('notifications.create');
   if coalesce(p_type, '') not in ('general', 'maintenance', 'policy', 'account') then raise exception 'Invalid notification type.'; end if;
   if coalesce(p_audience, '') not in ('all', 'selected') then raise exception 'Invalid audience.'; end if;
 
@@ -1607,7 +2043,8 @@ create or replace function public.admin_list_audit(
   p_from timestamptz default null,
   p_to timestamptz default null,
   p_limit integer default 25,
-  p_offset integer default 0
+  p_offset integer default 0,
+  p_actor_id uuid default null
 )
 returns jsonb
 language plpgsql security definer stable set search_path = ''
@@ -1616,7 +2053,11 @@ declare
   v_total bigint;
   v_items jsonb;
 begin
-  perform private.require_admin_permission('audit.view');
+  if not (private.has_admin_permission('audit.view') or private.has_admin_permission('audit_logs.view')) then
+    raise exception using
+      message = 'You do not have permission to perform this administrative action.',
+      errcode = '42501';
+  end if;
   p_limit := least(greatest(coalesce(p_limit, 25), 1), 100);
   p_offset := greatest(coalesce(p_offset, 0), 0);
   with filtered as (
@@ -1628,12 +2069,18 @@ begin
       coalesce(p.username, '') ilike '%' || p_search || '%')
       and (p_action is null or p_action = '' or a.action = p_action)
       and (p_resource is null or p_resource = '' or a.resource = p_resource)
+      and (p_actor_id is null or a.actor_id = p_actor_id)
       and (p_from is null or a.created_at >= p_from)
       and (p_to is null or a.created_at <= p_to)
   ), counted as (select count(*) as total from filtered)
-  select total into v_total from counted;
-  select coalesce(jsonb_agg(to_jsonb(x)), '[]'::jsonb) into v_items
-  from (select * from filtered order by created_at desc limit p_limit offset p_offset) x;
+  select
+    counted.total,
+    coalesce((
+      select jsonb_agg(to_jsonb(x))
+      from (select * from filtered order by created_at desc limit p_limit offset p_offset) x
+    ), '[]'::jsonb)
+  into v_total, v_items
+  from counted;
   return jsonb_build_object('items', v_items, 'total', v_total);
 end;
 $$;
@@ -1644,7 +2091,7 @@ language plpgsql security definer stable set search_path = ''
 as $$
 declare v_items jsonb;
 begin
-  perform private.require_admin_permission('users.view');
+  perform private.require_admin_permission('settings.view');
   select coalesce(jsonb_object_agg(key, value), '{}'::jsonb) into v_items from public.admin_platform_settings;
   return v_items;
 end;
@@ -1654,14 +2101,54 @@ create or replace function public.admin_set_setting(p_key text, p_value jsonb)
 returns jsonb
 language plpgsql security definer set search_path = ''
 as $$
+declare v_number numeric;
 begin
   perform private.require_admin_permission('settings.manage');
-  if coalesce(p_key, '') not in (
-    'general.platform_name', 'general.description', 'support.contact_email',
-    'content.max_post_media_mb', 'content.max_caption_chars'
-  ) then
+  if p_value is null then
+    raise exception 'A setting value is required.';
+  end if;
+
+  if p_key in ('general.platform_name', 'general.description', 'support.contact_email',
+               'support.business_hours') then
+    if jsonb_typeof(p_value) <> 'string' or length(btrim(p_value #>> '{}')) < 1
+       or length(p_value #>> '{}') > 500 then
+      raise exception 'This setting must be a short non-empty text value.';
+    end if;
+    if p_key = 'support.contact_email'
+       and (p_value #>> '{}') !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
+      raise exception 'Enter a valid support contact email.';
+    end if;
+  elsif p_key in ('content.max_post_media_mb', 'content.max_caption_chars',
+                  'moderation.auto_flag_threshold', 'security.session_timeout_minutes',
+                  'security.max_login_attempts', 'support.sla_first_response_hours',
+                  'support.sla_resolution_hours') then
+    if jsonb_typeof(p_value) <> 'number' then
+      raise exception 'This setting must be a number.';
+    end if;
+    v_number := p_value::numeric;
+    if p_key = 'content.max_post_media_mb' and (v_number < 1 or v_number > 200) then
+      raise exception 'Media size limit must be between 1 and 200 MB.';
+    elsif p_key = 'content.max_caption_chars' and (v_number < 100 or v_number > 5000) then
+      raise exception 'Caption limit must be between 100 and 5000 characters.';
+    elsif p_key = 'moderation.auto_flag_threshold' and (v_number < 0 or v_number > 100) then
+      raise exception 'Auto-flag threshold must be between 0 and 100.';
+    elsif p_key = 'security.session_timeout_minutes' and (v_number < 15 or v_number > 10080) then
+      raise exception 'Session timeout must be between 15 minutes and 7 days.';
+    elsif p_key = 'security.max_login_attempts' and (v_number < 3 or v_number > 20) then
+      raise exception 'Login attempt limit must be between 3 and 20.';
+    elsif p_key in ('support.sla_first_response_hours', 'support.sla_resolution_hours')
+          and (v_number < 1 or v_number > 720) then
+      raise exception 'SLA values must be between 1 and 720 hours.';
+    end if;
+  elsif p_key in ('moderation.require_review_for_media', 'notifications.announcements_enabled',
+                  'notifications.daily_digest', 'security.require_2fa_for_admins') then
+    if jsonb_typeof(p_value) <> 'boolean' then
+      raise exception 'This setting must be true or false.';
+    end if;
+  else
     raise exception 'This setting is not supported by the current platform.';
   end if;
+
   insert into public.admin_platform_settings (key, value, updated_by, updated_at)
   values (p_key, p_value, auth.uid(), now())
   on conflict (key) do update set value = excluded.value, updated_by = excluded.updated_by, updated_at = now();
@@ -1881,12 +2368,12 @@ begin
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.proname in (
-      'admin_get_my_access', 'admin_analytics', 'admin_dashboard',
-      'admin_list_users', 'admin_get_user', 'admin_mutate_user', 'admin_warn_user',
-      'admin_list_content', 'admin_mutate_content',
+      'admin_get_my_access', 'admin_analytics', 'admin_export_analytics', 'admin_dashboard',
+      'admin_list_users', 'admin_get_user', 'admin_mutate_user', 'admin_edit_user', 'admin_warn_user',
+      'admin_list_content', 'admin_get_content_history', 'admin_mutate_content',
       'admin_list_reports', 'admin_get_report', 'admin_mutate_report',
       'admin_list_tickets', 'admin_get_ticket', 'admin_mutate_ticket',
-      'admin_list_notifications', 'admin_send_notification',
+      'admin_list_notifications', 'admin_get_notification', 'admin_send_notification',
       'admin_create_notification', 'admin_delete_notification',
       'admin_list_templates', 'admin_mutate_template',
       'admin_list_audit', 'admin_get_settings', 'admin_set_setting',

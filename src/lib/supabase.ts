@@ -1,15 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { Platform } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import { authStorage } from './storage';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-const secureStorage = {
-  getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
-};
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
@@ -19,7 +13,9 @@ export const supabase = isSupabaseConfigured
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: Platform.OS === 'web',
-        storage: secureStorage,
+        // PKCE keeps recovery/authorization codes out of the URL fragment.
+        flowType: 'pkce',
+        storage: authStorage,
       },
     })
   : null;

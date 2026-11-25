@@ -43,7 +43,7 @@ create table public.posts (
 create table public.follows (
   follower_id uuid not null references public.profiles(id) on delete cascade,
   followed_id uuid not null references public.profiles(id) on delete cascade,
-  status text not null default 'accepted' check (status in ('pending', 'accepted', 'rejected')),
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'rejected')),
   created_at timestamptz not null default now(),
   primary key (follower_id, followed_id),
   check (follower_id <> followed_id)
@@ -142,6 +142,72 @@ $$;
 revoke execute on function private.is_conversation_member(uuid) from public;
 grant execute on function private.is_conversation_member(uuid) to authenticated;
 
+-- Block checks are shared by profile/media visibility, follow eligibility and chat
+-- policies. Security definer keeps them out of their own RLS evaluation paths.
+create or replace function private.profiles_are_blocked(p_first uuid, p_second uuid)
+returns boolean
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select exists (
+    select 1 from public.blocks b
+    where (b.blocker_id = p_first and b.blocked_id = p_second)
+       or (b.blocker_id = p_second and b.blocked_id = p_first)
+  );
+$$;
+
+create or replace function private.conversation_is_blocked(p_conversation_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select exists (
+    select 1
+    from public.conversation_members mine
+    join public.conversation_members other
+      on other.conversation_id = mine.conversation_id
+     and other.user_id <> mine.user_id
+    where mine.conversation_id = p_conversation_id
+      and private.profiles_are_blocked(mine.user_id, other.user_id)
+  );
+$$;
+
+-- An accepted follow only grants visibility when both accounts are active,
+-- guardian-cleared where required, and neither side has blocked the other.
+create or replace function private.follow_is_eligible(p_follower uuid, p_followed uuid)
+returns boolean
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select exists (
+    select 1
+    from public.follows f
+    join public.profiles viewer on viewer.id = f.follower_id
+    join public.profiles target on target.id = f.followed_id
+    where f.follower_id = p_follower
+      and f.followed_id = p_followed
+      and f.status = 'accepted'
+      and viewer.account_status = 'active'
+      and target.account_status = 'active'
+      and (not viewer.is_minor or viewer.guardian_consent_status = 'verified')
+      and (not target.is_minor or target.guardian_consent_status = 'verified')
+      and not private.profiles_are_blocked(f.follower_id, f.followed_id)
+  );
+$$;
+
+revoke execute on function private.profiles_are_blocked(uuid, uuid) from public;
+revoke execute on function private.conversation_is_blocked(uuid) from public;
+revoke execute on function private.follow_is_eligible(uuid, uuid) from public;
+grant execute on function private.profiles_are_blocked(uuid, uuid) to authenticated;
+grant execute on function private.conversation_is_blocked(uuid) to authenticated;
+grant execute on function private.follow_is_eligible(uuid, uuid) to authenticated;
+
 -- One row per conversation for the signed-in member, with the other participant and the
 -- latest message. Security definer keeps the peer's display name visible without widening
 -- the profiles RLS policy for everyone.
@@ -176,6 +242,7 @@ as $$
       select 1 from public.conversation_members cm
       where cm.conversation_id = c.id and cm.user_id = (select id from me)
     )
+      and not private.conversation_is_blocked(c.id)
   ),
   peers as (
     select distinct on (cm.conversation_id)
@@ -230,9 +297,7 @@ create policy "users can read own profile or accepted public profiles" on public
     account_status = 'active'
     and profile_visibility = 'public'
     and (not is_minor or guardian_consent_status = 'verified')
-  ) or exists (
-    select 1 from public.follows f where f.follower_id = auth.uid() and f.followed_id = id and f.status = 'accepted'
-  )
+  ) or private.follow_is_eligible(auth.uid(), id)
 );
 create policy "users can update their own profile" on public.profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 
@@ -242,19 +307,145 @@ create policy "eligible users can read posts" on public.posts for select to auth
   and (
     author_id = auth.uid()
     or (visibility = 'public' and exists (select 1 from public.profiles author where author.id = author_id and author.account_status = 'active' and (not author.is_minor or author.guardian_consent_status = 'verified')))
-    or (visibility = 'followers' and exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.followed_id = author_id and f.status = 'accepted'))
+    or (visibility = 'followers' and private.follow_is_eligible(auth.uid(), author_id))
   )
 );
 create policy "active users can create own posts" on public.posts for insert to authenticated with check (
-  author_id = auth.uid() and exists (select 1 from public.profiles p where p.id = auth.uid() and p.account_status = 'active' and (not p.is_minor or p.guardian_consent_status = 'verified'))
+  author_id = auth.uid()
+  and sensitive_review_status = 'pending'
+  and exists (select 1 from public.profiles p where p.id = auth.uid() and p.account_status = 'active' and (not p.is_minor or p.guardian_consent_status = 'verified'))
 );
 create policy "authors can edit their posts" on public.posts for update to authenticated using (author_id = auth.uid()) with check (author_id = auth.uid());
 create policy "authors can delete their posts" on public.posts for delete to authenticated using (author_id = auth.uid());
 
 create policy "users can read related follow edges" on public.follows for select to authenticated using (follower_id = auth.uid() or followed_id = auth.uid());
-create policy "users can request follows" on public.follows for insert to authenticated with check (follower_id = auth.uid());
-create policy "follow participants can update requests" on public.follows for update to authenticated using (follower_id = auth.uid() or followed_id = auth.uid()) with check (follower_id = auth.uid() or followed_id = auth.uid());
+create policy "users can request follows" on public.follows for insert to authenticated with check (
+  follower_id = auth.uid()
+  and status = 'pending'
+  and not private.profiles_are_blocked(auth.uid(), followed_id)
+  and exists (
+    select 1 from public.profiles viewer
+    where viewer.id = auth.uid()
+      and viewer.account_status = 'active'
+      and (not viewer.is_minor or viewer.guardian_consent_status = 'verified')
+  )
+  and exists (
+    select 1 from public.profiles target
+    where target.id = followed_id
+      and target.account_status = 'active'
+      and (not target.is_minor or target.guardian_consent_status = 'verified')
+  )
+);
+create policy "followers can cancel or renew requests" on public.follows for update to authenticated using (follower_id = auth.uid()) with check (
+  follower_id = auth.uid()
+  and status = 'pending'
+  and not private.profiles_are_blocked(auth.uid(), followed_id)
+  and exists (
+    select 1 from public.profiles viewer
+    where viewer.id = auth.uid()
+      and viewer.account_status = 'active'
+      and (not viewer.is_minor or viewer.guardian_consent_status = 'verified')
+  )
+  and exists (
+    select 1 from public.profiles target
+    where target.id = followed_id
+      and target.account_status = 'active'
+      and (not target.is_minor or target.guardian_consent_status = 'verified')
+  )
+);
+create policy "followed users can decide requests" on public.follows for update to authenticated using (followed_id = auth.uid()) with check (
+  followed_id = auth.uid()
+  and status in ('accepted', 'rejected')
+  and not private.profiles_are_blocked(follower_id, auth.uid())
+  and exists (
+    select 1 from public.profiles viewer
+    where viewer.id = follower_id
+      and viewer.account_status = 'active'
+      and (not viewer.is_minor or viewer.guardian_consent_status = 'verified')
+  )
+  and exists (
+    select 1 from public.profiles target
+    where target.id = auth.uid()
+      and target.account_status = 'active'
+      and (not target.is_minor or target.guardian_consent_status = 'verified')
+  )
+);
 create policy "users can unfollow" on public.follows for delete to authenticated using (follower_id = auth.uid() or followed_id = auth.uid());
+
+create or replace function public.respond_to_follow_request(p_follower_id uuid, p_accept boolean)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if p_follower_id = (select auth.uid()) then
+    raise exception 'You cannot respond to your own follow request';
+  end if;
+  if not exists (
+    select 1 from public.profiles p
+    where p.id = (select auth.uid())
+      and p.account_status = 'active'
+      and (not p.is_minor or p.guardian_consent_status = 'verified')
+  ) then
+    raise exception 'Your account is not eligible to manage follow requests';
+  end if;
+  if not exists (
+    select 1 from public.profiles p
+    where p.id = p_follower_id
+      and p.account_status = 'active'
+      and (not p.is_minor or p.guardian_consent_status = 'verified')
+  ) then
+    raise exception 'That account is not eligible to follow';
+  end if;
+  if private.profiles_are_blocked(p_follower_id, (select auth.uid())) then
+    raise exception 'You cannot respond to a blocked account';
+  end if;
+
+  update public.follows
+  set status = case when p_accept then 'accepted' else 'rejected' end
+  where follower_id = p_follower_id
+    and followed_id = (select auth.uid())
+    and status = 'pending';
+
+  if not found then
+    raise exception 'That follow request is no longer pending';
+  end if;
+end;
+$$;
+
+revoke execute on function public.respond_to_follow_request(uuid, boolean) from public;
+revoke execute on function public.respond_to_follow_request(uuid, boolean) from anon;
+grant execute on function public.respond_to_follow_request(uuid, boolean) to authenticated;
+
+-- Security definer so a target can review a private requester's public identity
+-- without widening the general profile SELECT policy.
+create or replace function public.get_my_follow_requests()
+returns table (
+  follower_id uuid,
+  display_name text,
+  username text,
+  avatar_url text,
+  created_at timestamptz
+)
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select p.id, p.display_name, p.username, p.avatar_url, f.created_at
+  from public.follows f
+  join public.profiles p on p.id = f.follower_id
+  where f.followed_id = (select auth.uid())
+    and f.status = 'pending'
+    and not private.profiles_are_blocked(p.id, f.followed_id)
+  order by f.created_at desc
+  limit 100;
+$$;
+
+revoke execute on function public.get_my_follow_requests() from public;
+revoke execute on function public.get_my_follow_requests() from anon;
+grant execute on function public.get_my_follow_requests() to authenticated;
 
 create policy "users can read likes on readable posts" on public.post_likes for select to authenticated using (exists (select 1 from public.posts p where p.id = post_id));
 create policy "users can like posts" on public.post_likes for insert to authenticated with check (user_id = auth.uid() and exists (select 1 from public.posts p where p.id = post_id));
@@ -265,9 +456,9 @@ create policy "active users can comment" on public.comments for insert to authen
 create policy "authors can delete own comments" on public.comments for delete to authenticated using (author_id = auth.uid());
 
 create policy "members can read conversation members" on public.conversation_members for select to authenticated using (private.is_conversation_member(conversation_id));
-create policy "active members can read conversations" on public.conversations for select to authenticated using (private.is_conversation_member(id) and exists (select 1 from public.profiles p where p.id = auth.uid() and p.account_status = 'active' and (not p.is_minor or p.guardian_consent_status = 'verified')));
-create policy "members can read messages" on public.messages for select to authenticated using (private.is_conversation_member(conversation_id));
-create policy "active members can send messages" on public.messages for insert to authenticated with check (sender_id = auth.uid() and private.is_conversation_member(conversation_id) and exists (select 1 from public.profiles p where p.id = auth.uid() and p.account_status = 'active' and (not p.is_minor or p.guardian_consent_status = 'verified')));
+create policy "active members can read conversations" on public.conversations for select to authenticated using (private.is_conversation_member(id) and not private.conversation_is_blocked(id) and exists (select 1 from public.profiles p where p.id = auth.uid() and p.account_status = 'active' and (not p.is_minor or p.guardian_consent_status = 'verified')));
+create policy "members can read messages" on public.messages for select to authenticated using (private.is_conversation_member(conversation_id) and not private.conversation_is_blocked(conversation_id));
+create policy "active members can send messages" on public.messages for insert to authenticated with check (sender_id = auth.uid() and private.is_conversation_member(conversation_id) and not private.conversation_is_blocked(conversation_id) and exists (select 1 from public.profiles p where p.id = auth.uid() and p.account_status = 'active' and (not p.is_minor or p.guardian_consent_status = 'verified')));
 
 create policy "users can submit reports" on public.reports for insert to authenticated with check (reporter_id = auth.uid());
 create policy "users can see their reports" on public.reports for select to authenticated using (reporter_id = auth.uid());
@@ -526,7 +717,24 @@ on conflict (id) do nothing;
 create policy "users can upload their own avatar" on storage.objects for insert to authenticated with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy "users can update their own avatar" on storage.objects for update to authenticated using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text) with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
 create policy "users can view avatars for visible profiles" on storage.objects for select to authenticated using (bucket_id = 'avatars' and exists (
-  select 1 from public.profiles p where p.id::text = (storage.foldername(name))[1] and p.account_status = 'active' and (p.profile_visibility = 'public' or p.id = auth.uid() or exists (select 1 from public.follows f where f.follower_id = auth.uid() and f.followed_id = p.id and f.status = 'accepted'))
+  select 1 from public.profiles p
+  where p.id::text = (storage.foldername(name))[1]
+    and (
+      p.id = auth.uid()
+      or (
+        p.account_status = 'active'
+        and exists (
+          select 1 from public.profiles viewer
+          where viewer.id = auth.uid()
+            and viewer.account_status = 'active'
+            and (not viewer.is_minor or viewer.guardian_consent_status = 'verified')
+        )
+        and (
+          (p.profile_visibility = 'public' and (not p.is_minor or p.guardian_consent_status = 'verified') and not private.profiles_are_blocked(auth.uid(), p.id))
+          or private.follow_is_eligible(auth.uid(), p.id)
+        )
+      )
+    )
 ));
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -542,9 +750,22 @@ create policy "users can upload their own post media" on storage.objects for ins
 create policy "users can delete their own post media" on storage.objects for delete to authenticated using (
   bucket_id = 'post-media' and (storage.foldername(name))[1] = auth.uid()::text
 );
-create policy "users can read post media for reviewed posts" on storage.objects for select to authenticated using (
+create policy "users can read post media for visible reviewed posts" on storage.objects for select to authenticated using (
   bucket_id = 'post-media' and exists (
-    select 1 from public.posts p where p.media_key = storage.objects.name and p.sensitive_review_status = 'safe'
+    select 1
+    from public.posts p
+    join public.profiles viewer on viewer.id = auth.uid() and viewer.account_status = 'active'
+    where (p.media_key = storage.objects.name or p.thumbnail_key = storage.objects.name)
+      and p.sensitive_review_status = 'safe'
+      and (
+        p.author_id = auth.uid()
+        or (p.visibility = 'public' and exists (
+          select 1 from public.profiles author
+          where author.id = p.author_id and author.account_status = 'active'
+            and (not author.is_minor or author.guardian_consent_status = 'verified')
+        ) and not private.profiles_are_blocked(auth.uid(), p.author_id))
+        or (p.visibility = 'followers' and private.follow_is_eligible(auth.uid(), p.author_id))
+      )
   )
 );
 
@@ -726,7 +947,7 @@ as $$
     from public.follows f
     join public.profiles actor on actor.id = f.follower_id
     where f.followed_id = (select id from me)
-      and f.status = 'accepted'
+      and f.status = 'pending'
       and f.follower_id <> (select id from me)
       and not exists (
         select 1 from public.blocks b

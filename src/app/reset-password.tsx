@@ -24,15 +24,24 @@ export default function ResetPasswordScreen() {
     const client = supabase;
     if (!client) return;
     let active = true;
-    void (async () => {
-      const { data } = await client.auth.getSession();
-      if (active) {
-        setHasRecoverySession(Boolean(data.session));
+    // A normal signed-in session must not be enough to change a password.
+    // Only Supabase's explicit PASSWORD_RECOVERY event grants this screen.
+    const { data: { subscription } } = client.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY' && active) {
+        setHasRecoverySession(true);
         setChecking(false);
       }
-    })();
+    });
+    void client.auth.getSession().then(({ data }) => {
+      if (active && !data.session) setChecking(false);
+    });
+    const timeout = setTimeout(() => {
+      if (active) setChecking(false);
+    }, 3000);
     return () => {
       active = false;
+      clearTimeout(timeout);
+      subscription.unsubscribe();
     };
   }, []);
 
