@@ -177,12 +177,12 @@ export default function EditProfileScreen() {
               <Feather name="image" size={13} color={colors.inkSoft} />
               <Text style={[type.smallMedium, { color: colors.inkSoft, fontSize: 11 }]}>Cover image</Text>
             </View>
-            <Text style={[type.small, { color: colors.muted, fontSize: 10, lineHeight: 16 }]}>
+            <Text style={[type.small, { color: colors.muted, fontSize: 10 }]}>
               A generated clay cover is used for now. Custom cover uploads need a cover_url column in profiles.
             </Text>
           </ClayCard>
 
-          <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, textAlign: 'center', lineHeight: 14 }]}>
+          <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, textAlign: 'center' }]}>
             Website, location, and pronouns need additional profile columns. The current schema keeps profiles focused on safety.
           </Text>
         </View>
@@ -228,7 +228,7 @@ export default function EditProfileScreen() {
                 <Text style={[type.small, { color: colors.muted, fontSize: 10 }]}>Used to sign in. Change it from Settings.</Text>
               </View>
             </View>
-            <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, marginTop: 12, lineHeight: 15 }]}>
+            <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, marginTop: 12 }]}>
               {Platform.OS === 'web' ? 'On the web, profile photos are stored in the private avatars bucket and shown through signed URLs.' : 'Profile photos upload to the private avatars bucket.'}
             </Text>
           </ClayCard>

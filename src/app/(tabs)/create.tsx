@@ -355,7 +355,7 @@ export default function CreateScreen() {
             <Chip key={item} label={item} active={topic === item} onPress={() => setTopic(topic === item ? null : item)} />
           ))}
         </View>
-        <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, marginTop: 12, lineHeight: 14 }]}>
+        <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, marginTop: 12 }]}>
           Location, tagging people, and drafts across devices need additional backend fields. Drafts here are stored only on this device.
         </Text>
       </ClayCard>
@@ -376,7 +376,7 @@ export default function CreateScreen() {
         onPress={() => void publish()}
       />
       {isDemo ? <Notice text="Preview mode: the composer is fully interactive, but publishing needs a real Supabase account." /> : null}
-      <Text style={[type.small, { color: colors.muted, textAlign: 'center', fontSize: 9, lineHeight: 14 }]}>
+      <Text style={[type.small, { color: colors.muted, textAlign: 'center', fontSize: 9 }]}>
         Every post goes through a safety review before it appears in feeds.
       </Text>
     </View>

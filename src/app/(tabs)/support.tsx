@@ -224,7 +224,7 @@ export default function SupportScreen() {
                   </Pressable>
                   {open ? (
                     <View style={{ paddingBottom: 12, gap: 8 }}>
-                      <Text style={[type.small, { color: colors.inkSoft, lineHeight: 19 }]}>{faq.answer}</Text>
+                      <Text style={[type.small, { color: colors.inkSoft }]}>{faq.answer}</Text>
                       <Link href={{ pathname: '/(tabs)/support/articles/[slug]', params: { slug: faq.articleSlug } }} asChild>
                         <ClayButton
                           label="Read the full guide"
@@ -283,7 +283,7 @@ function SupportRow({ icon, title, description, meta, href }: { icon: IconName; 
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
           <Text numberOfLines={1} style={[type.smallMedium, { color: colors.ink }]}>{title}</Text>
-          <Text numberOfLines={2} style={[type.small, { color: colors.muted, fontSize: 11, lineHeight: 16 }]}>{description}</Text>
+          <Text numberOfLines={2} style={[type.small, { color: colors.muted, fontSize: 11 }]}>{description}</Text>
           {meta ? <Text style={[type.tiny, { color: colors.mutedLight, fontSize: 9 }]}>{meta}</Text> : null}
         </View>
         <Feather name="chevron-right" size={16} color={colors.mutedLight} style={{ marginTop: 8 }} />

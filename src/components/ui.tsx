@@ -671,7 +671,7 @@ export function EmptyState({
         <Feather name={icon} size={26} color={colors[tone === 'sage' ? 'sage' : tone === 'mint' ? 'success' : tone === 'peach' ? 'danger' : 'inkSoft']} />
       </View>
       <Text style={[type.h3, { color: colors.ink, textAlign: 'center' }]}>{title}</Text>
-      {description ? <Text style={[type.small, { color: colors.muted, textAlign: 'center', maxWidth: 380, lineHeight: 19 }]}>{description}</Text> : null}
+      {description ? <Text style={[type.small, { color: colors.muted, textAlign: 'center', maxWidth: 380 }]}>{description}</Text> : null}
       {action ? <View style={{ marginTop: 8 }}>{action}</View> : null}
     </View>
   );
@@ -735,7 +735,7 @@ export function Notice({ text, tone = 'info' }: { text: string; tone?: 'info' | 
   return (
     <View style={{ backgroundColor: map[tone].bg, borderRadius: radii.input, paddingHorizontal: 13, paddingVertical: 11, flexDirection: 'row', gap: 8, alignItems: 'flex-start' }}>
       <Feather name={map[tone].icon} size={14} color={map[tone].fg} style={{ marginTop: 2 }} />
-      <Text style={[type.small, { color: map[tone].fg, flex: 1, lineHeight: 18 }]}>{text}</Text>
+      <Text style={[type.small, { color: map[tone].fg, flex: 1 }]}>{text}</Text>
     </View>
   );
 }
@@ -1115,7 +1115,7 @@ export function Checkbox({
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={[type.smallMedium, { color: colors.ink }]}>{label}</Text>
-        {description ? <Text style={[type.small, { color: colors.muted, lineHeight: 17 }]}>{description}</Text> : null}
+        {description ? <Text style={[type.small, { color: colors.muted }]}>{description}</Text> : null}
       </View>
     </Pressable>
   );

@@ -93,7 +93,7 @@ export default function SupportArticleScreen() {
               </View>
               <Text style={[type.h3, { color: colors.ink }]}>{section.heading}</Text>
             </View>
-            <Text style={[type.body, { color: colors.inkSoft, lineHeight: 24 }]}>{section.body}</Text>
+            <Text style={[type.body, { color: colors.inkSoft }]}>{section.body}</Text>
           </View>
         ))}
       </ClayCard>

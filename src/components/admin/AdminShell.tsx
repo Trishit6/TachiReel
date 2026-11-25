@@ -22,7 +22,7 @@ const SECTIONS: { title: string; items: AdminNavItem[] }[] = [
   {
     title: 'Overview',
     items: [
-      { label: 'Dashboard', href: '/admin', icon: 'grid' },
+      { label: 'Dashboard', href: '/admin/dashboard', icon: 'grid' },
       { label: 'Platform Analytics', href: '/admin/analytics', icon: 'bar-chart-2', permission: 'analytics.view' },
     ],
   },
@@ -47,6 +47,7 @@ const SECTIONS: { title: string; items: AdminNavItem[] }[] = [
   {
     title: 'Administration',
     items: [
+      { label: 'Administrators', href: '/admin/administrators', icon: 'user-check', permission: 'admin.manage' },
       { label: 'Roles & Permissions', href: '/admin/roles', icon: 'shield', permission: 'admin.manage' },
       { label: 'Platform Settings', href: '/admin/settings', icon: 'settings', permission: 'settings.manage' },
       { label: 'Admin Profile', href: '/admin/profile', icon: 'user' },
@@ -56,7 +57,9 @@ const SECTIONS: { title: string; items: AdminNavItem[] }[] = [
 
 function isActive(pathname: string, href: Href): boolean {
   const target = String(href);
-  if (target === '/admin') return pathname === '/admin' || pathname === '/admin/';
+  if (target === '/admin/dashboard') {
+    return pathname === '/admin' || pathname === '/admin/' || pathname === target;
+  }
   return pathname === target || pathname.startsWith(`${target}/`);
 }
 

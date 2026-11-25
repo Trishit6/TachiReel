@@ -193,7 +193,7 @@ export default function GuardianPendingScreen() {
                 <Feather name="shield" size={28} color={colors.success} />
               </View>
               <SemanticHeading style={[type.h2, { color: colors.ink, textAlign: 'center' }]}>Consent needs a backend.</SemanticHeading>
-              <Text style={[type.small, { color: colors.muted, textAlign: 'center', lineHeight: 19 }]}>
+              <Text style={[type.small, { color: colors.muted, textAlign: 'center' }]}>
                 Add your Supabase URL and anon key to the .env file to manage guardian consent requests.
               </Text>
               <ClayButton label="Back to log in" variant="secondary" onPress={() => router.replace('/auth')} />
@@ -245,7 +245,7 @@ export default function GuardianPendingScreen() {
                       </Text>
                     </View>
                   </View>
-                  <Text selectable style={[type.small, { color: colors.success, backgroundColor: colors.backgroundAlt, borderRadius: 10, padding: 10, marginTop: 12, fontSize: 9, lineHeight: 14 }]}>{link}</Text>
+                  <Text selectable style={[type.small, { color: colors.success, backgroundColor: colors.backgroundAlt, borderRadius: 10, padding: 10, marginTop: 12, fontSize: 9 }]}>{link}</Text>
                   <View style={{ marginTop: 12 }}>
                     <ClayButton label={Platform.OS === 'web' ? 'Copy consent link' : 'Share consent link'} icon={Platform.OS === 'web' ? 'clipboard' : 'share-2'} full onPress={() => void shareLink()} />
                   </View>
@@ -276,7 +276,7 @@ export default function GuardianPendingScreen() {
                   <View style={{ marginTop: 12 }}>
                     <ClayButton label={submitting ? 'Creating request…' : 'Create consent link'} full iconRight="arrow-right" loading={submitting} onPress={() => void sendRequest()} />
                   </View>
-                  <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, lineHeight: 14, marginTop: 12, textAlign: 'center' }]}>
+                  <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, marginTop: 12, textAlign: 'center' }]}>
                     Your account stays private, keeps sensitive content off, and cannot be used until consent is recorded.
                   </Text>
                 </ClayCard>

@@ -294,7 +294,7 @@ export default function SettingsScreen() {
                 );
               })}
             </View>
-            <Text style={[type.small, { color: colors.muted, fontSize: 10, marginTop: 10, lineHeight: 15 }]}>
+            <Text style={[type.small, { color: colors.muted, fontSize: 10, marginTop: 10 }]}>
               Your choice is saved on this device and follows you across every screen.
             </Text>
           </SettingsCard>
@@ -304,7 +304,7 @@ export default function SettingsScreen() {
             <ToggleRow icon="message-circle" title="Comments" description="Replies on your moments." value={prefs.comments} onToggle={() => savePrefs({ ...prefs, comments: !prefs.comments })} />
             <ToggleRow icon="user-plus" title="New followers" description="When someone joins your circle." value={prefs.follows} onToggle={() => savePrefs({ ...prefs, follows: !prefs.follows })} />
             <ToggleRow icon="mail" title="Email summaries" description="A gentle weekly recap." value={prefs.email} onToggle={() => savePrefs({ ...prefs, email: !prefs.email })} />
-            <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, marginTop: 10, lineHeight: 14 }]}>
+            <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, marginTop: 10 }]}>
               In-app toggles are stored on this device. Email delivery needs a notifications preference table and an email provider.
             </Text>
           </SettingsCard>
@@ -315,7 +315,7 @@ export default function SettingsScreen() {
               <ClayButton label="New ticket" size="sm" variant="secondary" icon="plus" onPress={() => router.push('/(tabs)/support/new')} />
               <ClayButton label="Ask assistant" size="sm" variant="ghost" icon="message-square" onPress={() => router.push('/(tabs)/support/chat')} />
             </View>
-            <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, marginTop: 10, lineHeight: 14 }]}>
+            <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, marginTop: 10 }]}>
               Tickets are private to your account. The assistant answers only from TachiReel behaviour and can hand off to the team.
             </Text>
           </SettingsCard>
@@ -331,14 +331,14 @@ export default function SettingsScreen() {
                   <Text style={[type.small, { color: colors.muted, fontSize: 10 }]}>Social sign-in is not configured yet.</Text>
                 </View>
               </View>
-              <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, lineHeight: 14 }]}>
+              <Text style={[type.small, { color: colors.mutedLight, fontSize: 9 }]}>
                 Connecting Google or Apple needs an OAuth provider configured in Supabase Auth. Until then, email and password is the supported sign-in method.
               </Text>
             </View>
           </SettingsCard>
 
           <SettingsCard icon="alert-triangle" title="Your data" subtitle="A clear view of what you control.">
-            <Text style={[type.small, { color: colors.muted, lineHeight: 19 }]}>
+            <Text style={[type.small, { color: colors.muted }]}>
               Your posts, comments, likes, follows, and messages are stored in your Supabase project. You can edit or delete your own posts and comments at any time. Account deletion needs a server-side cleanup function and is not enabled in this build.
             </Text>
             <View style={{ marginTop: 12 }}>

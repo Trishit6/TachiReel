@@ -151,7 +151,7 @@ export default function NewSupportTicketScreen() {
           <Text style={[type.h3, { color: colors.ink }]}>Attachments</Text>
           <Badge label="Optional" tone="muted" />
         </View>
-        <Text style={[type.small, { color: colors.muted, fontSize: 11, lineHeight: 17 }]}>
+        <Text style={[type.small, { color: colors.muted, fontSize: 11 }]}>
           Images, PDFs and text files up to 10 MB. Files are stored in a private bucket and linked only to your ticket. Never include passwords or private links.
         </Text>
         <FileUpload

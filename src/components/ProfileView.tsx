@@ -114,7 +114,7 @@ export function ProfileView({
             </View>
           </View>
 
-          <Text style={[type.body, { color: colors.inkSoft, marginTop: 16, maxWidth: 560, lineHeight: 22 }]}>
+          <Text style={[type.body, { color: colors.inkSoft, marginTop: 16, maxWidth: 560 }]}>
             {profile.bio || 'Still deciding what to say here. Probably something soft.'}
           </Text>
 
@@ -198,7 +198,7 @@ export function ProfileView({
         </View>
       )}
 
-      <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, textAlign: 'center', lineHeight: 14 }]}>
+      <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, textAlign: 'center' }]}>
         Your space, your pace. Only what you choose to share.
       </Text>
     </View>

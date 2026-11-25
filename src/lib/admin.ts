@@ -1,93 +1,229 @@
 import { supabase } from './supabase';
 
-export type AdminRole = 'super_admin' | 'content_moderator' | 'support_agent' | 'analyst';
+export type AdminRole =
+  | 'super_admin'
+  | 'admin'
+  | 'content_manager'
+  | 'moderator'
+  | 'support_manager'
+  | 'support_agent'
+  | 'analyst'
+  | 'notification_manager'
+  | 'community_manager'
+  // Kept so existing assignments keep working after the v2 migration.
+  | 'content_moderator';
 
 export type AdminPermission =
   | 'admin.manage'
+  | 'roles.view'
+  | 'roles.create'
+  | 'roles.edit'
+  | 'roles.delete'
+  | 'permissions.assign'
+  | 'admins.view'
+  | 'admins.create'
+  | 'admins.edit'
+  | 'admins.deactivate'
   | 'users.view'
+  | 'users.edit'
   | 'users.suspend'
   | 'users.verify_minor'
   | 'users.delete'
   | 'posts.manage'
   | 'posts.view'
+  | 'posts.delete'
+  | 'posts.restore'
   | 'reelyx.manage'
   | 'reelyx.view'
+  | 'reelyx.feature'
   | 'comments.manage'
   | 'comments.view'
+  | 'comments.delete'
   | 'reports.manage'
   | 'reports.view'
+  | 'reports.review'
+  | 'reports.resolve'
+  | 'reports.escalate'
   | 'tickets.view'
   | 'tickets.manage'
+  | 'support.assign'
+  | 'support.resolve'
   | 'help.manage'
   | 'notifications.view'
   | 'notifications.manage'
+  | 'notifications.create'
+  | 'notifications.send'
+  | 'settings.view'
   | 'settings.manage'
   | 'audit.view'
-  | 'analytics.view';
+  | 'audit_logs.view'
+  | 'analytics.view'
+  | 'analytics.export';
 
-export const ADMIN_ROLES: AdminRole[] = ['super_admin', 'content_moderator', 'support_agent', 'analyst'];
+export const ADMIN_ROLES: AdminRole[] = [
+  'super_admin', 'admin', 'content_manager', 'moderator', 'support_manager',
+  'support_agent', 'analyst', 'notification_manager', 'community_manager',
+  'content_moderator',
+];
 
 export const ROLE_LABELS: Record<AdminRole, string> = {
   super_admin: 'Super Admin',
-  content_moderator: 'Content Moderator',
+  admin: 'Admin',
+  content_manager: 'Content Manager',
+  moderator: 'Moderator',
+  support_manager: 'Support Manager',
   support_agent: 'Support Agent',
   analyst: 'Analyst',
+  notification_manager: 'Notification Manager',
+  community_manager: 'Community Manager',
+  content_moderator: 'Content Moderator (legacy)',
 };
 
 /**
  * Keep this matrix in sync with private.admin_permissions_for_role() in
- * supabase/admin_schema.sql. It only controls what the interface shows — every
+ * supabase/admin_rbac_v2.sql. It only controls what the interface shows — every
  * RPC repeats the check in Postgres before touching data.
  */
 export const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[]> = {
   super_admin: [
-    'admin.manage', 'users.view', 'users.suspend', 'users.verify_minor', 'users.delete',
-    'posts.manage', 'posts.view', 'reelyx.manage', 'reelyx.view',
-    'comments.manage', 'comments.view', 'reports.manage', 'reports.view',
-    'tickets.view', 'tickets.manage', 'help.manage',
-    'notifications.view', 'notifications.manage',
-    'settings.manage', 'audit.view', 'analytics.view',
+    'admin.manage', 'roles.view', 'roles.create', 'roles.edit', 'roles.delete', 'permissions.assign',
+    'admins.view', 'admins.create', 'admins.edit', 'admins.deactivate',
+    'users.view', 'users.edit', 'users.suspend', 'users.verify_minor', 'users.delete',
+    'posts.manage', 'posts.view', 'posts.delete', 'posts.restore',
+    'reelyx.manage', 'reelyx.view', 'reelyx.feature',
+    'comments.manage', 'comments.view', 'comments.delete',
+    'reports.manage', 'reports.view', 'reports.review', 'reports.resolve', 'reports.escalate',
+    'tickets.view', 'tickets.manage', 'support.assign', 'support.resolve', 'help.manage',
+    'notifications.view', 'notifications.manage', 'notifications.create', 'notifications.send',
+    'settings.manage', 'settings.view',
+    'audit.view', 'audit_logs.view', 'analytics.view', 'analytics.export',
+  ],
+  admin: [
+    'admins.view', 'roles.view',
+    'users.view', 'users.edit', 'users.suspend', 'users.verify_minor', 'users.delete',
+    'posts.manage', 'posts.view', 'posts.delete', 'posts.restore',
+    'reelyx.manage', 'reelyx.view', 'reelyx.feature',
+    'comments.manage', 'comments.view', 'comments.delete',
+    'reports.manage', 'reports.view', 'reports.review', 'reports.resolve', 'reports.escalate',
+    'tickets.view', 'tickets.manage', 'support.assign', 'support.resolve', 'help.manage',
+    'notifications.view', 'notifications.manage', 'notifications.create', 'notifications.send',
+    'settings.view', 'audit.view', 'analytics.view', 'analytics.export',
+  ],
+  content_manager: [
+    'users.view',
+    'posts.manage', 'posts.view', 'posts.delete', 'posts.restore',
+    'reelyx.manage', 'reelyx.view', 'reelyx.feature',
+    'comments.manage', 'comments.view', 'comments.delete',
+    'reports.view', 'reports.review', 'reports.resolve',
+    'notifications.view', 'analytics.view',
+  ],
+  moderator: [
+    'users.view',
+    'posts.view', 'posts.manage',
+    'reelyx.view', 'reelyx.manage',
+    'comments.view', 'comments.manage', 'comments.delete',
+    'reports.view', 'reports.review', 'reports.resolve', 'reports.escalate',
+    'analytics.view',
+  ],
+  support_manager: [
+    'users.view',
+    'tickets.view', 'tickets.manage', 'support.assign', 'support.resolve', 'help.manage',
+    'reports.view', 'notifications.view',
+    'analytics.view', 'analytics.export',
+  ],
+  support_agent: [
+    'users.view',
+    'tickets.view', 'tickets.manage', 'support.resolve', 'help.manage',
+    'notifications.view', 'reports.view',
+  ],
+  analyst: [
+    'users.view', 'posts.view', 'reelyx.view', 'comments.view',
+    'reports.view', 'tickets.view', 'notifications.view',
+    'analytics.view', 'analytics.export',
+    'audit.view', 'audit_logs.view', 'settings.view',
+    'roles.view', 'admins.view',
+  ],
+  notification_manager: [
+    'users.view',
+    'notifications.view', 'notifications.manage', 'notifications.create', 'notifications.send',
+    'analytics.view',
+  ],
+  community_manager: [
+    'users.view', 'posts.view', 'reelyx.view',
+    'comments.view', 'comments.manage',
+    'reports.view', 'notifications.view', 'analytics.view',
   ],
   content_moderator: [
     'users.view', 'users.suspend', 'posts.manage', 'posts.view',
     'reelyx.manage', 'reelyx.view', 'comments.manage', 'comments.view',
     'reports.manage', 'reports.view', 'analytics.view',
   ],
-  support_agent: [
-    'users.view', 'tickets.view', 'tickets.manage', 'help.manage',
-    'notifications.view', 'notifications.manage', 'reports.view',
-    'analytics.view',
-  ],
-  analyst: [
-    'users.view', 'posts.view', 'reelyx.view', 'comments.view',
-    'reports.view', 'tickets.view', 'notifications.view',
-    'analytics.view', 'audit.view',
-  ],
 };
 
 export const PERMISSION_LABELS: Record<AdminPermission, string> = {
-  'admin.manage': 'Manage administrator roles',
+  'admin.manage': 'Manage administrators and roles',
+  'roles.view': 'View roles',
+  'roles.create': 'Create custom roles',
+  'roles.edit': 'Edit custom roles',
+  'roles.delete': 'Delete custom roles',
+  'permissions.assign': 'Assign permissions',
+  'admins.view': 'View administrators',
+  'admins.create': 'Create administrators',
+  'admins.edit': 'Edit administrators',
+  'admins.deactivate': 'Deactivate administrators',
   'users.view': 'View user accounts',
+  'users.edit': 'Edit user accounts',
   'users.suspend': 'Suspend and reactivate accounts',
   'users.verify_minor': 'Override minor guardian verification',
   'users.delete': 'Delete accounts',
   'posts.manage': 'Review posts and media',
   'posts.view': 'View posts',
+  'posts.delete': 'Remove posts',
+  'posts.restore': 'Restore posts',
   'reelyx.manage': 'Review Reelyx videos',
   'reelyx.view': 'View Reelyx videos',
+  'reelyx.feature': 'Feature Reelyx videos',
   'comments.manage': 'Moderate comments',
   'comments.view': 'View comments',
+  'comments.delete': 'Delete comments',
   'reports.manage': 'Decide reports',
   'reports.view': 'View reports',
+  'reports.review': 'Review reports',
+  'reports.resolve': 'Resolve reports',
+  'reports.escalate': 'Escalate reports',
   'tickets.view': 'View support tickets',
   'tickets.manage': 'Reply to and update tickets',
+  'support.assign': 'Assign support tickets',
+  'support.resolve': 'Resolve and reopen tickets',
   'help.manage': 'Manage help centre content',
   'notifications.view': 'View announcements',
-  'notifications.manage': 'Send announcements',
+  'notifications.manage': 'Manage announcements',
+  'notifications.create': 'Draft announcements',
+  'notifications.send': 'Send announcements',
+  'settings.view': 'View platform settings',
   'settings.manage': 'Change platform settings',
   'audit.view': 'View audit logs',
+  'audit_logs.view': 'View audit logs',
   'analytics.view': 'View platform analytics',
+  'analytics.export': 'Export analytics',
 };
+
+/** Module grouping used to render the permission matrix. */
+export const PERMISSION_GROUPS: { module: string; permissions: AdminPermission[] }[] = [
+  { module: 'Dashboard', permissions: ['analytics.view'] },
+  { module: 'Analytics', permissions: ['analytics.export'] },
+  { module: 'Users', permissions: ['users.view', 'users.edit', 'users.suspend', 'users.verify_minor', 'users.delete'] },
+  { module: 'Posts', permissions: ['posts.view', 'posts.manage', 'posts.delete', 'posts.restore'] },
+  { module: 'Reelyx', permissions: ['reelyx.view', 'reelyx.manage', 'reelyx.feature'] },
+  { module: 'Comments', permissions: ['comments.view', 'comments.manage', 'comments.delete'] },
+  { module: 'Reports', permissions: ['reports.view', 'reports.review', 'reports.manage', 'reports.resolve', 'reports.escalate'] },
+  { module: 'Support', permissions: ['tickets.view', 'tickets.manage', 'support.assign', 'support.resolve', 'help.manage'] },
+  { module: 'Notifications', permissions: ['notifications.view', 'notifications.create', 'notifications.manage', 'notifications.send'] },
+  { module: 'Roles', permissions: ['roles.view', 'roles.create', 'roles.edit', 'roles.delete', 'permissions.assign', 'admin.manage'] },
+  { module: 'Administrators', permissions: ['admins.view', 'admins.create', 'admins.edit', 'admins.deactivate'] },
+  { module: 'Settings', permissions: ['settings.view', 'settings.manage'] },
+  { module: 'Audit', permissions: ['audit.view', 'audit_logs.view'] },
+];
 
 export type AdminAccess = {
   user_id: string;
@@ -285,6 +421,18 @@ export type AdminAccount = {
   avatar_url: string | null;
   email: string | null;
   created_by_username: string | null;
+  last_sign_in_at: string | null;
+  custom_role: string | null;
+  extra_permissions: string[] | null;
+};
+
+export type AdminRoleDefinition = {
+  key: string;
+  label: string;
+  is_system: boolean;
+  description: string;
+  permissions: AdminPermission[];
+  assigned_count: number;
 };
 
 export type AdminAssignee = {
@@ -394,6 +542,18 @@ export const adminApi = {
   listAssignees: () => callRpc<PagedResult<AdminAssignee>>('admin_list_assignees'),
   mutateAdmin: (userId: string, role: string, action: string) =>
     callRpc<Record<string, unknown>>('admin_mutate_admin', { p_user_id: userId, p_role: role, p_action: action }),
+
+  listRoles: () => callRpc<{ roles: AdminRoleDefinition[] }>('admin_list_roles'),
+  upsertCustomRole: (key: string, label: string, description: string, permissions: AdminPermission[]) =>
+    callRpc<Record<string, unknown>>('admin_upsert_custom_role', {
+      p_key: key, p_label: label, p_description: description, p_permissions: permissions,
+    }),
+  deleteCustomRole: (key: string) =>
+    callRpc<Record<string, unknown>>('admin_delete_custom_role', { p_key: key }),
+  setAdminAccess: (userId: string, customRole: string | null, extraPermissions: AdminPermission[]) =>
+    callRpc<Record<string, unknown>>('admin_set_admin_access', {
+      p_user_id: userId, p_custom_role: customRole, p_extra_permissions: extraPermissions,
+    }),
 };
 
 export async function signAdminPaths(paths: string[], bucket = 'post-media'): Promise<Record<string, string>> {

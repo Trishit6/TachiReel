@@ -295,7 +295,7 @@ function Sidebar({ collapsed, onToggleCollapse }: { collapsed: boolean; onToggle
           {!collapsed ? <Text style={[type.smallMedium, { color: colors.muted }]}>Log out</Text> : null}
         </Pressable>
         {!collapsed ? (
-          <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, paddingHorizontal: 10, lineHeight: 13 }]}>A softer corner of the internet.</Text>
+          <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, paddingHorizontal: 10 }]}>A softer corner of the internet.</Text>
         ) : null}
       </View>
     </Animated.View>

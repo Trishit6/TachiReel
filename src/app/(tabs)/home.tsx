@@ -460,7 +460,7 @@ export default function HomeScreen() {
           <Feather name="compass" size={18} color={colors.accent} />
         </View>
         <Text style={[type.h3, { color: colors.ink }]}>Discover something new.</Text>
-        <Text style={[type.small, { color: colors.inkSoft, marginTop: 6, lineHeight: 19 }]}>
+        <Text style={[type.small, { color: colors.inkSoft, marginTop: 6 }]}>
           Browse topics, places and people outside your usual circle.
         </Text>
         <View style={{ marginTop: 14 }}>

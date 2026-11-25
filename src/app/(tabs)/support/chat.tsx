@@ -233,7 +233,7 @@ export default function SupportChatScreen() {
                   </View>
                   <Text style={[type.tiny, { color: colors.muted }]}>{isAssistant ? 'TachiReel assistant' : 'You'}</Text>
                 </View>
-                <Text style={[type.small, { color: colors.ink, lineHeight: 20 }]}>{message.body}</Text>
+                <Text style={[type.small, { color: colors.ink }]}>{message.body}</Text>
                 {isAssistant && message.id !== 'pending' ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     {synthesisSupported ? (

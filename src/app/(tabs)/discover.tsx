@@ -705,7 +705,7 @@ function FeaturedCard({
                 <Text style={{ fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 9, color: '#F5F1E9', letterSpacing: 0.6 }}>{post.topic.toUpperCase()}</Text>
               </View>
             ) : null}
-            <Text numberOfLines={2} style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: size === 'large' ? 20 : 17, lineHeight: size === 'large' ? 27 : 23, color: '#F5F1E9', letterSpacing: -0.3 }}>
+            <Text numberOfLines={2} style={{ fontFamily: 'PlusJakartaSans_700Bold', fontSize: size === 'large' ? 20 : 17, color: '#F5F1E9', letterSpacing: -0.3 }}>
               {post.caption || 'A little moment'}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
@@ -787,7 +787,7 @@ function ExploreTile({
                 {post.topic.toUpperCase()}
               </Text>
             ) : null}
-            <Text numberOfLines={2} style={[type.smallMedium, { color: '#F5F1E9', fontSize: 11.5, lineHeight: 15.5 }]}>
+            <Text numberOfLines={2} style={[type.smallMedium, { color: '#F5F1E9', fontSize: 11.5 }]}>
               {post.caption || 'A little moment'}
             </Text>
           </View>
@@ -956,7 +956,7 @@ function DiscoverySidebar({
           <Feather name="feather" size={17} color={colors.accent} />
         </View>
         <Text style={[type.h3, { color: colors.ink }]}>Add your corner.</Text>
-        <Text style={[type.small, { color: colors.inkSoft, marginTop: 5, lineHeight: 18 }]}>
+        <Text style={[type.small, { color: colors.inkSoft, marginTop: 5 }]}>
           A photo, a thought, a place worth remembering. The feed is better with you in it.
         </Text>
         <View style={{ marginTop: 14 }}>

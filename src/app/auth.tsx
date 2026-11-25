@@ -367,7 +367,7 @@ export default function AuthScreen() {
         </View>
       ) : null}
 
-      <Text style={[type.small, { color: colors.mutedLight, fontSize: 10, textAlign: 'center', marginTop: 10, lineHeight: 16 }]}>
+      <Text style={[type.small, { color: colors.mutedLight, fontSize: 10, textAlign: 'center', marginTop: 10 }]}>
         By continuing, you agree to our <Text onPress={() => setLegal('terms')} style={{ color: colors.accent, textDecorationLine: 'underline' }}>Terms of Service</Text> and <Text onPress={() => setLegal('privacy')} style={{ color: colors.accent, textDecorationLine: 'underline' }}>Privacy Policy</Text>.
       </Text>
 

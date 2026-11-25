@@ -229,7 +229,7 @@ function MessageBubble({ message, isOwn, displayName }: { message: SupportTicket
           <Text style={[type.tiny, { color: colors.mutedLight, fontSize: 9 }]}>{formatRelativeTime(message.created_at)}</Text>
         </View>
         <View style={{ backgroundColor: isOwn ? colors.accentSoft : colors.backgroundAlt, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10 }}>
-          <Text style={[type.small, { color: colors.ink, lineHeight: 19 }]}>{message.body}</Text>
+          <Text style={[type.small, { color: colors.ink }]}>{message.body}</Text>
         </View>
       </View>
     </View>

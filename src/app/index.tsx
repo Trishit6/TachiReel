@@ -149,7 +149,7 @@ export default function IndexScreen() {
               </View>
               <SemanticHeading style={[wide ? type.display : type.displaySm, { color: colors.ink }]}>Welcome to TachiReel</SemanticHeading>
               <Text style={[type.h2, { color: colors.accent, marginTop: 10 }]}>Capture. Share. Explore.</Text>
-              <Text style={[type.body, { color: colors.muted, fontSize: 16, lineHeight: 26, marginTop: 16, maxWidth: 480 }]}>
+              <Text style={[type.body, { color: colors.muted, fontSize: 16, marginTop: 16, maxWidth: 480 }]}>
                 A gentle social space for the photos, people, and small moments that make your world feel like yours.
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 24, flexWrap: 'wrap' }}>
@@ -195,7 +195,7 @@ export default function IndexScreen() {
                   </View>
                 </View>
                 <Text style={[type.h3, { color: colors.ink }]}>{feature.title}</Text>
-                <Text style={[type.small, { color: colors.muted, marginTop: 7, lineHeight: 20 }]}>{feature.copy}</Text>
+                <Text style={[type.small, { color: colors.muted, marginTop: 7 }]}>{feature.copy}</Text>
               </ClayCard>
             ))}
           </View>
@@ -259,7 +259,7 @@ export default function IndexScreen() {
                   </View>
                   <Text style={[type.smallMedium, { color: colors.ink }]}>{item.title}</Text>
                 </View>
-                <Text style={[type.small, { color: colors.muted, marginTop: 8, lineHeight: 19 }]}>{item.copy}</Text>
+                <Text style={[type.small, { color: colors.muted, marginTop: 8 }]}>{item.copy}</Text>
               </ClayCard>
             ))}
           </View>

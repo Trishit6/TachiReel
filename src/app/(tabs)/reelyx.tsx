@@ -546,8 +546,8 @@ export default function ReelyxScreen() {
           {introWidth > 0 ? (
             <View style={{ width: introWidth, gap: 14, alignItems: 'flex-start' }}>
               <Badge label="REELYX · short videos" tone="sage" />
-              <SemanticHeading style={{ fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 42, lineHeight: 48, letterSpacing: -1.8, color: colors.ink }}>Reelyx.</SemanticHeading>
-              <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, lineHeight: 22, color: colors.muted }}>
+              <SemanticHeading style={{ fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 42, letterSpacing: -1.8, color: colors.ink }}>Reelyx.</SemanticHeading>
+              <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: colors.muted }}>
                 Small stories in motion. Watch a moment, then keep scrolling — or create your own.
               </Text>
               <ClayButton label="Create a Reelyx" size="sm" icon="video" onPress={() => router.push({ pathname: '/(tabs)/create', params: { type: 'video' } })} />
@@ -827,7 +827,7 @@ function ReelOverlay({
           </Pressable>
         ) : null}
       </View>
-      <Text style={{ fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12.5, lineHeight: 18, color: colors.white }} numberOfLines={3}>{reel.caption}</Text>
+      <Text style={{ fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12.5, color: colors.white }} numberOfLines={3}>{reel.caption}</Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Feather name="music" size={11} color="rgba(255,255,255,0.82)" />
         <Text style={{ fontFamily: 'PlusJakartaSans_400Regular', fontSize: 10, color: 'rgba(255,255,255,0.82)' }} numberOfLines={1}>{reel.audio}</Text>

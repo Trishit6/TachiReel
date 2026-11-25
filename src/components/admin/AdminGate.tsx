@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { ClayButton, EmptyState, LoadingState } from '../ui';
@@ -10,8 +10,23 @@ import { useTheme } from '../../theme/theme';
 
 export function AdminGate({ children }: { children: ReactNode }) {
   const { loading, access, error } = useAdmin();
-  const { signOut, isDemo } = useSession();
+  const { signOut, isDemo, userId, loading: sessionLoading } = useSession();
   const { colors, type } = useTheme();
+  const unauthenticated = !sessionLoading && !userId && !isDemo;
+
+  useEffect(() => {
+    if (!loading && !access && unauthenticated) router.replace('/admin/login');
+  }, [access, loading, unauthenticated]);
+
+  if (unauthenticated && !access) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, backgroundColor: colors.background }}>
+        <SemanticHeading visuallyHidden>Administrator sign in</SemanticHeading>
+        <TachiReelLogo size={44} />
+        <LoadingState label="Opening administrator sign in" />
+      </View>
+    );
+  }
 
   if (loading) {
     return (

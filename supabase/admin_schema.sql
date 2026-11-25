@@ -1766,14 +1766,14 @@ returns jsonb
 language sql security definer stable set search_path = ''
 as $$
   select jsonb_build_object(
-    'categories', coalesce((select jsonb_agg(to_jsonb(x) order by x.sort_order, x.name) from (
-      select slug, name, description from public.admin_help_categories where is_active
+    'categories', coalesce((select jsonb_agg((to_jsonb(x) - 'sort_order') order by x.sort_order, x.name) from (
+      select slug, name, description, sort_order from public.admin_help_categories where is_active
     ) x), '[]'::jsonb),
-    'articles', coalesce((select jsonb_agg(to_jsonb(x) order by x.updated_at desc) from (
-      select slug, category_slug, title, summary, minutes, keywords, sections from public.admin_help_articles where is_published
+    'articles', coalesce((select jsonb_agg((to_jsonb(x) - 'updated_at') order by x.updated_at desc) from (
+      select slug, category_slug, title, summary, minutes, keywords, sections, updated_at from public.admin_help_articles where is_published
     ) x), '[]'::jsonb),
-    'faqs', coalesce((select jsonb_agg(to_jsonb(x) order by x.sort_order, x.question) from (
-      select question, answer, article_slug from public.admin_help_faqs where is_published
+    'faqs', coalesce((select jsonb_agg((to_jsonb(x) - 'sort_order') order by x.sort_order, x.question) from (
+      select question, answer, article_slug, sort_order from public.admin_help_faqs where is_published
     ) x), '[]'::jsonb)
   );
 $$;
@@ -1937,13 +1937,16 @@ insert into public.admin_notification_templates (key, title, body, type) values
 on conflict (key) do nothing;
 
 /* =============================================================================
- * BOOTSTRAP (run once with the SQL editor, then delete these statements):
+ * BOOTSTRAP
  *
- * replace 'first-admin@example.com' with a real, already-registered account.
+ * After applying this file and supabase/admin_rbac_v2.sql, provision the
+ * official initial Super Admin (admin@admin.com) with the server-side script:
  *
- * insert into public.admin_roles (user_id, role, created_by)
- * select id, 'super_admin', id from auth.users where email = 'first-admin@example.com';
+ *   SUPABASE_URL=https://<project>.supabase.co \
+ *   SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
+ *   npm run seed:super-admin
  *
+ * It is idempotent, never sets a password, and prints a one-time recovery link.
  * Do not add a client-side "make admin" screen. All later admin accounts are
- * created from Roles & Permissions by an existing Super Admin.
+ * created from Administrators / Roles & Permissions by an existing Super Admin.
  * =========================================================================== */

@@ -237,10 +237,10 @@ export default function NotificationsScreen() {
                   {announcement ? (
                     <>
                       <Text style={[type.smallMedium, { color: colors.ink }]} numberOfLines={1}>{item.title ?? 'Announcement'}</Text>
-                      <Text style={[type.small, { color: colors.inkSoft, lineHeight: 18 }]} numberOfLines={3}>{item.body ?? ''}</Text>
+                      <Text style={[type.small, { color: colors.inkSoft }]} numberOfLines={3}>{item.body ?? ''}</Text>
                     </>
                   ) : (
-                    <Text style={[type.small, { color: colors.inkSoft, lineHeight: 18 }]}>
+                    <Text style={[type.small, { color: colors.inkSoft }]}>
                       <Text style={[type.smallMedium, { color: colors.ink }]}>{item.actorName}</Text> {text}
                     </Text>
                   )}

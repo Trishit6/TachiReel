@@ -217,7 +217,7 @@ export function ChatWindow({
                         borderColor: colors.line,
                       }}
                     >
-                      <Text style={[type.small, { color: mine ? colors.accentContrast : colors.ink, lineHeight: 19 }]}>{message.body}</Text>
+                      <Text style={[type.small, { color: mine ? colors.accentContrast : colors.ink }]}>{message.body}</Text>
                     </View>
                     <Text style={[type.small, { color: colors.mutedLight, fontSize: 8, marginTop: 3, textAlign: mine ? 'right' : 'left' }]}>
                       {messageTime(message.created_at)}

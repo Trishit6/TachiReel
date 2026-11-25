@@ -203,7 +203,7 @@ export function ReelyxCommentsSheet({ visible, video, onClose, onCommentAdded }:
                     <Text style={[type.smallMedium, { color: colors.ink }]}>{comment.author.display_name}</Text>
                     <Text style={[type.tiny, { color: colors.mutedLight }]}>{formatRelativeTime(comment.created_at)}</Text>
                   </View>
-                  <Text style={[type.small, { color: colors.inkSoft, lineHeight: 19 }]}>{comment.body}</Text>
+                  <Text style={[type.small, { color: colors.inkSoft }]}>{comment.body}</Text>
                 </View>
               </View>
             ))}

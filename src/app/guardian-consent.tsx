@@ -124,7 +124,7 @@ export default function GuardianConsentScreen() {
         <Feather name={icon} size={30} color={tone === 'success' ? colors.success : colors.danger} />
       </View>
       <SemanticHeading style={[type.h2, { color: colors.ink, textAlign: 'center' }]}>{title}</SemanticHeading>
-      <Text style={[type.body, { color: colors.muted, textAlign: 'center', lineHeight: 21 }]}>{copy}</Text>
+      <Text style={[type.body, { color: colors.muted, textAlign: 'center' }]}>{copy}</Text>
       {action}
     </ClayCard>
   );
@@ -151,7 +151,7 @@ export default function GuardianConsentScreen() {
                   <Feather name="shield" size={28} color={colors.success} />
                 </View>
                 <SemanticHeading style={[type.h2, { color: colors.ink, textAlign: 'center' }]}>Consent review is offline.</SemanticHeading>
-                <Text style={[type.small, { color: colors.muted, textAlign: 'center', lineHeight: 19 }]}>
+                <Text style={[type.small, { color: colors.muted, textAlign: 'center' }]}>
                   Add your Supabase URL and anon key to the .env file to review guardian consent requests.
                 </Text>
                 <ClayButton label="Back to sign in" variant="secondary" onPress={() => router.replace('/auth')} />
@@ -261,7 +261,7 @@ export default function GuardianConsentScreen() {
                       <Text style={[type.small, { color: colors.muted, fontSize: 10 }]}>Link expires {formatExpiry(request.request_expires_at)}</Text>
                     </View>
                   </View>
-                  <Text style={[type.small, { color: colors.inkSoft, backgroundColor: colors.backgroundAlt, borderRadius: 10, padding: 11, marginTop: 13, lineHeight: 18, fontSize: 10 }]}>
+                  <Text style={[type.small, { color: colors.inkSoft, backgroundColor: colors.backgroundAlt, borderRadius: 10, padding: 11, marginTop: 13, fontSize: 10 }]}>
                     By approving, you confirm that you are this teen&apos;s parent or legal guardian and that they may use TachiReel. Their account stays private and sensitive content remains off.
                   </Text>
                 </ClayCard>
@@ -280,7 +280,7 @@ export default function GuardianConsentScreen() {
                     <ClayButton label={submitting ? 'Recording…' : 'Approve consent'} full iconRight="check" loading={submitting} onPress={() => void respond('approve')} />
                     <ClayButton label="Decline request" full variant="danger" onPress={() => void respond('decline')} />
                   </View>
-                  <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, lineHeight: 14, textAlign: 'center', marginTop: 10 }]}>
+                  <Text style={[type.small, { color: colors.mutedLight, fontSize: 9, textAlign: 'center', marginTop: 10 }]}>
                     Declining keeps the account inactive. You can ask your teen for a new link if you change your mind.
                   </Text>
                 </ClayCard>

@@ -2,42 +2,50 @@
 
 ## Project
 
-`TachiReel` (package `tachireel`) is an Expo SDK 58 / React Native 0.88 social app with a minor-safety onboarding flow. The entrypoint is `expo-router/entry`; all routes live in `src/app/` (root layout: `src/app/_layout.tsx`). `App.tsx` and `index.ts` are unused template leftovers — do not add code there.
+`TachiReel` (package `tachireel`) is an Expo SDK 58 / React Native 0.88 social app with a minor-safety onboarding flow and a staff admin workspace. The entrypoint is `expo-router/entry`; all routes live in `src/app/` (root layout: `src/app/_layout.tsx`, which wires Theme/Session/Toast providers and a headerless `Stack`). `App.tsx` and `index.ts` are unused template leftovers — do not add code there.
 
 ## Commands
 
 Package manager is npm (`package-lock.json`; no `bun.lock`).
 
 ```bash
-npm start                     # Expo dev server
-npm run web                   # dev server, browser
-npm run ios                   # iOS simulator
-npm run android               # Android emulator
-npm run lint                  # expo lint
-npm run typecheck             # tsc --noEmit
-npx expo install <package>    # add deps; never npm install directly
-npx expo-doctor               # dependency/config health check
+npm start                        # Expo dev server
+npm run web                      # dev server, browser
+npm run ios                      # iOS simulator
+npm run android                  # Android emulator
+npm run lint                     # expo lint
+npm run typecheck                # tsc --noEmit
+npx expo install <package>       # add deps; never npm install directly
+npx expo-doctor                  # dependency/config health check
+npx expo export --platform web   # static web export into dist/
 ```
 
-Run `npm run lint` and `npm run typecheck` before declaring work done. There is no test runner configured: `jest`, `supabase-mocks`, and `freebuff` are in `package.json` but have no config or tests. Do not look for `npm test`.
+Run both `npm run lint` and `npm run typecheck` before declaring work done; both currently pass clean. There is no test runner configured: `jest`, `supabase-mocks`, and `freebuff` are in `package.json` but have no config or tests. Do not look for `npm test`.
+
+`tsconfig.json` excludes `supabase/functions/`, so `npm run typecheck` does **not** check the Deno Edge Function. Review that file against Deno APIs (`Deno.serve`, `Deno.env`, `https://esm.sh/...`), not Node.
 
 Expo SDK APIs change between releases. Before using an Expo/React Native API, check the SDK 58 docs at `https://docs.expo.dev/versions/v58.0.0/` or the index at `https://docs.expo.dev/llms.txt`; don't answer from memory. EAS is not configured (no `eas.json`).
 
 ## Architecture
 
-- `src/app/` — Expo Router routes. `(tabs)/_layout.tsx` wraps a `Slot` in the custom `AppShell`, not a Tabs navigator.
-- `src/components/` — shared UI (`ui.tsx` primitives, `AppShell`, `PostCard`, `ProfileView`, `ChatWindow`).
-- `src/theme/theme.tsx` — `ThemeProvider` and `useTheme()` tokens; palette values are in `src/theme/colors.ts`. Typography is **Plus Jakarta Sans**, loaded in the root layout. (Some older notes mention Manrope/DM Sans; the code is authoritative.)
-- `src/lib/` — Supabase data helpers (`posts`, `messages`, `upload`), demo data, storage, share links, and `session.tsx`.
-- Responsive web is a first-class target: sidebar at >=820px, mobile bottom nav below, and Reels becomes immersive on mobile. Verify both narrow and desktop layouts for UI changes.
+- `src/app/` — Expo Router routes. `(tabs)/_layout.tsx` wraps a `Slot` in the custom `AppShell`, not a Tabs navigator. `reels.tsx` is only a legacy redirect to `reelyx.tsx`; the short-video feed is **Reelyx**.
+- `src/app/admin/` — staff workspace gated by `AdminProvider` → `AdminGate` → `AdminShell`; admin UI lives in `src/components/admin/`. Admin data is never available in Preview mode.
+- `src/components/` — shared UI (`ui.tsx` primitives incl. `PressableScale`, `AppShell`, `PostCard`, `ProfileView`, `ChatWindow`, `ReelyxCommentsSheet`).
+- `src/theme/theme.tsx` — `ThemeProvider` and `useTheme()` tokens; palette values are in `src/theme/colors.ts`. Body type is **Plus Jakarta Sans**; display type is **Bricolage Grotesque**. Web fonts are declared as preloaded WOFF2 `@font-face` rules in `src/app/+html.tsx`; native loads TTFs via `useFonts` in the root layout. Do not add runtime `useFonts` on web (duplicate `@font-face` rules trigger Chrome font fallback).
+- `src/lib/` — Supabase/data helpers (`posts`, `reelyx`, `messages`, `support`, `upload`, `admin`), `session.tsx`, `demo-data`, `demo-session`, `search`, `share`, `site`/`seo`, `speech`, `format`, and `storage`.
+- Responsive web is a first-class target: sidebar at >=820px, mobile bottom nav below, and Reelyx becomes immersive on mobile. Verify both narrow and desktop layouts for UI changes.
+- Web output is `static` (`app.json`). Routes export `generateMetadata`; dynamic routes also export `generateStaticParams` (list real params for static pages, return `[]` for client-only routes). `src/lib/site.ts` is the single source for `SITE_ORIGIN` (from `EXPO_PUBLIC_APP_URL`, default `http://localhost:8081`). `public/sitemap.xml`, `robots.txt`, and `llms.txt` are hand-maintained and use the local origin.
 - Typed routes are enabled (`experiments.typedRoutes`); `.expo/types` is generated by `expo start`.
 
 ## Backend and auth
 
-- Supabase is optional at runtime. `src/lib/supabase.ts` exports `supabase = null` unless `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` are set. Guard calls (`supabase?.…` / `isSupabaseConfigured`) and keep the "Preview mode" labeling.
-- Without Supabase, demo login is `admin@admin.com` / `password`. The demo session is in-memory (reload returns to login) and never activates when Supabase is configured.
-- `supabase/schema.sql` is the full schema. It is a fresh-setup script (`create table`, `create policy`), not idempotent; only the "Redesign additions" appendix is safe to re-apply to an existing database.
-- Env: `.env.example` defines the Supabase keys, `EXPO_PUBLIC_APP_URL` (share/guardian links), and `EXPO_PUBLIC_MUX_PLAYBACK_DOMAIN` (currently unused — Mux is not integrated).
+- Supabase is optional at runtime. `src/lib/supabase.ts` exports `supabase = null` unless both `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` are set. Guard calls (`supabase?.…` / `isSupabaseConfigured`) and keep the "Preview mode" labeling.
+- Without Supabase, demo login is `admin@admin.com` / `password`. The demo session is in-memory (reload returns to login), gated on `isDemoMode = !isSupabaseConfigured`, and never activates when Supabase is configured. Demo mode never grants admin access.
+- Local preferences use SecureStore on native and `localStorage` on web via `src/lib/storage.ts`; Supabase auth persistence also uses SecureStore. Do not import `expo-secure-store` directly in screens/components — it breaks web.
+- `supabase/schema.sql` is the full fresh-setup schema (`create table`, `create policy`), not idempotent; only the "Redesign additions" appendix is safe to re-apply to an existing database.
+- `supabase/admin_schema.sql` is a separate **additive, idempotent** migration; apply it after `schema.sql`. Bootstrap the first `super_admin` only with the SQL at the bottom of that file — there is deliberately no client-side "make admin" path. The UI permission matrix in `src/lib/admin.ts` must stay in sync with `private.admin_permissions_for_role()`; every admin RPC rechecks permissions in Postgres.
+- `supabase/functions/tachireel-support-chat/` is a Deno Edge Function for the support assistant. It verifies the caller's JWT, owns chat storage, and requires server-only secrets (`SUPPORT_AI_API_KEY`, optional `SUPPORT_AI_MODEL`); never use `EXPO_PUBLIC_*` for them. Deploy with `supabase functions deploy tachireel-support-chat`; missing config shows setup guidance plus article/FAQ fallback, never simulated AI replies.
+- Env: `.env.example` defines the Supabase keys, `EXPO_PUBLIC_APP_URL` (share/guardian/SEO links), `EXPO_PUBLIC_MUX_PLAYBACK_DOMAIN` (currently unused — Mux is not integrated), and the server-only support secrets.
 
 ## Gotchas
 
@@ -48,11 +56,14 @@ Expo SDK APIs change between releases. Before using an Expo/React Native API, ch
 - **Guardian consent is possession-based.** `request_guardian_consent` (minor), `get_guardian_consent` (anon), and `respond_to_guardian_consent` (anon/authenticated) issue a 7-day bearer link. The minor can see the token, so it is not identity-verified.
 - **RLS recursion:** never subquery `conversation_members` in its own policy (Postgres `42P17`). Use `private.is_conversation_member(...)`.
 - **Inbox depends on RPCs.** `get_my_conversations` must exist or Inbox errors. New threads use `start_conversation` with the `peer_profile_id` parameter; `src/lib/messages.ts` is aligned with the SQL signature.
+- **Admin roles are server-side.** Never trust a client flag or `ROLE_PERMISSIONS` alone; RPCs enforce access. Preview/demo mode must stay locked out of `/admin`.
+- **Web style arrays:** when composing style arrays for `PressableScale`/`ClayCard`, flatten with `.filter(Boolean)`. Hermes Web throws `TypeError: Failed to set an indexed property [0] on 'CSSStyleDeclaration'` when a style array contains `null`/`undefined` entries.
 - **Native folders are generated.** `ios/` and `android/` are gitignored (CNG); configure via `app.json`/config plugins, never by editing them. Expo Go only has bundled native modules, so native-code deps need a development build.
 - **Web Metro cache:** after installing packages, an HTTP 500 "Unable to resolve module" usually means restart with `npx expo start --clear`; Metro does not pick up packages installed while it is running.
 - `app.json` scheme is `looply`, while the in-app brand is `TachiReel` — relevant for deep links.
-- `dist/` is generated web output and is gitignored.
+- `dist/` is generated web output and is gitignored. Do not edit `dist/`.
 
 ## Reference
 
-`knowledge.md` contains deeper route-by-route and schema notes, but parts are stale (e.g., font names and lint-warning counts). Trust the code and config over that file.
+- `knowledge.md` has route-by-route and schema notes, but parts are stale (e.g., design tokens, font names, the old `reels`/`(tabs)/index` routes). Trust the code and config over that file.
+- `README.md` and `supabase/functions/tachireel-support-chat/README.md` cover setup/deploy commands.

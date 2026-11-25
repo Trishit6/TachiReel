@@ -1,11 +1,12 @@
 import { adminPageMetadata } from '../../lib/seo';
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { Avatar, ClayButton, Dialog, ModalCard, SearchField, Select, useToast } from '../../components/ui';
+import { Avatar, ClayButton, ClayInput, Checkbox, Dialog, ModalCard, SearchField, Select, useToast } from '../../components/ui';
 import { useAdmin } from '../../components/admin/AdminProvider';
 import { AdminCard, AdminPage, AdminRestricted, DataTable, KeyValue, LoadingCard, StatusBadge } from '../../components/admin/AdminUI';
 import {
   ADMIN_ROLES,
+  PERMISSION_GROUPS,
   PERMISSION_LABELS,
   ROLE_LABELS,
   ROLE_PERMISSIONS,
@@ -15,6 +16,7 @@ import {
   titleCase,
   type AdminAccount,
   type AdminPermission,
+  type AdminRoleDefinition,
   type AdminUser,
 } from '../../lib/admin';
 import { useTheme } from '../../theme/theme';
@@ -35,6 +37,22 @@ export default function AdminRolesScreen() {
   const [newRole, setNewRole] = useState('content_moderator');
   const [pending, setPending] = useState<RoleAction | null>(null);
   const [saving, setSaving] = useState(false);
+  const [roles, setRoles] = useState<AdminRoleDefinition[]>([]);
+  const [customDraft, setCustomDraft] = useState<{
+    key: string; label: string; description: string; permissions: AdminPermission[];
+  } | null>(null);
+  const [customSaving, setCustomSaving] = useState(false);
+  const [deleteRole, setDeleteRole] = useState<AdminRoleDefinition | null>(null);
+
+  const loadRoles = useCallback(async () => {
+    try {
+      const result = await adminApi.listRoles();
+      setRoles(result.roles ?? []);
+    } catch {
+      // A project that has not run admin_rbac_v2.sql still gets the built-in matrix.
+      setRoles([]);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -51,9 +69,12 @@ export default function AdminRolesScreen() {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => void load(), 0);
+    const timer = setTimeout(() => {
+      void load();
+      void loadRoles();
+    }, 0);
     return () => clearTimeout(timer);
-  }, [load]);
+  }, [load, loadRoles]);
 
   useEffect(() => {
     if (!addOpen) return;
@@ -84,39 +105,139 @@ export default function AdminRolesScreen() {
     }
   };
 
+  const saveCustomRole = async () => {
+    if (!customDraft) return;
+    setCustomSaving(true);
+    try {
+      await adminApi.upsertCustomRole(
+        customDraft.key.trim().toLowerCase(),
+        customDraft.label.trim(),
+        customDraft.description.trim(),
+        customDraft.permissions,
+      );
+      toast.show('Custom role saved.', 'success');
+      setCustomDraft(null);
+      void loadRoles();
+    } catch (caught) {
+      toast.show(friendlyError(caught), 'error');
+    } finally {
+      setCustomSaving(false);
+    }
+  };
+
+  const removeCustomRole = async () => {
+    if (!deleteRole) return;
+    setCustomSaving(true);
+    try {
+      await adminApi.deleteCustomRole(deleteRole.key);
+      toast.show('Custom role deleted.', 'success');
+      setDeleteRole(null);
+      void loadRoles();
+    } catch (caught) {
+      toast.show(friendlyError(caught), 'error');
+    } finally {
+      setCustomSaving(false);
+    }
+  };
+
   if (!can('admin.manage')) return <AdminRestricted permission="admin.manage" />;
 
-  const allPermissions = Array.from(new Set(ADMIN_ROLES.flatMap((role) => ROLE_PERMISSIONS[role])));
+  const customRoles = roles.filter((role) => !role.is_system);
 
   return (
     <AdminPage
       title="Roles & Permissions"
       subtitle="Assign staff roles from existing accounts. Roles are enforced by Postgres RPCs, never by the interface alone."
-      actions={<ClayButton label="Add administrator" size="sm" icon="plus" onPress={() => { setSearch(''); setResults([]); setSelected(null); setNewRole('content_moderator'); setAddOpen(true); }} />}
+      actions={<ClayButton label="Add administrator" size="sm" icon="plus" onPress={() => { setSearch(''); setResults([]); setSelected(null); setNewRole('moderator'); setAddOpen(true); }} />}
     >
       <AdminCard>
         <Text style={[type.h3, { color: colors.ink }]}>Permission matrix</Text>
-        <Text style={[type.small, { color: colors.muted }]}>This matrix mirrors private.admin_permissions_for_role() in supabase/admin_schema.sql. The database is the source of truth.</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ minWidth: 840 }}>
+        <Text style={[type.small, { color: colors.muted }]}>
+          Generated from the permission definitions and mirrors private.admin_permissions_for_role() in supabase/admin_rbac_v2.sql. The database is the source of truth.
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ minWidth: 1120 }}>
           <View>
             <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.line, paddingBottom: 8 }}>
-              <View style={{ width: 260 }}><Text style={[type.tiny, { color: colors.muted }]}>PERMISSION</Text></View>
+              <View style={{ width: 250 }}><Text style={[type.tiny, { color: colors.muted }]}>PERMISSION</Text></View>
               {ADMIN_ROLES.map((role) => (
-                <View key={role} style={{ width: 145 }}><Text style={[type.tiny, { color: colors.muted }]}>{ROLE_LABELS[role].toUpperCase()}</Text></View>
+                <View key={role} style={{ width: 118 }}><Text style={[type.tiny, { color: colors.muted }]} numberOfLines={1}>{ROLE_LABELS[role].toUpperCase()}</Text></View>
               ))}
             </View>
-            {allPermissions.map((permission) => (
-              <View key={permission} style={{ flexDirection: 'row', alignItems: 'center', minHeight: 34, borderBottomWidth: 1, borderBottomColor: colors.line }}>
-                <View style={{ width: 260, paddingRight: 10 }}><Text style={[type.small, { color: colors.inkSoft }]} numberOfLines={1}>{PERMISSION_LABELS[permission as AdminPermission] ?? permission}</Text></View>
-                {ADMIN_ROLES.map((role) => (
-                  <View key={role} style={{ width: 145 }}>
-                    <StatusBadge status={ROLE_PERMISSIONS[role].includes(permission as AdminPermission) ? 'verified' : 'none'} />
+            {PERMISSION_GROUPS.map((group) => (
+              <View key={group.module}>
+                <View style={{ flexDirection: 'row', backgroundColor: colors.backgroundAlt, borderBottomWidth: 1, borderBottomColor: colors.line }}>
+                  <View style={{ flex: 1, paddingVertical: 7, paddingHorizontal: 8 }}>
+                    <Text style={[type.tiny, { color: colors.accent, letterSpacing: 0.8 }]}>{group.module.toUpperCase()}</Text>
+                  </View>
+                </View>
+                {group.permissions.map((permission) => (
+                  <View key={permission} style={{ flexDirection: 'row', alignItems: 'center', minHeight: 34, borderBottomWidth: 1, borderBottomColor: colors.line }}>
+                    <View style={{ width: 250, paddingRight: 10, paddingLeft: 8 }}>
+                      <Text style={[type.small, { color: colors.inkSoft }]} numberOfLines={1}>{PERMISSION_LABELS[permission] ?? permission}</Text>
+                    </View>
+                    {ADMIN_ROLES.map((role) => (
+                      <View key={role} style={{ width: 118 }}>
+                        <StatusBadge status={ROLE_PERMISSIONS[role].includes(permission) ? 'verified' : 'none'} />
+                      </View>
+                    ))}
                   </View>
                 ))}
               </View>
             ))}
           </View>
         </ScrollView>
+      </AdminCard>
+
+      <AdminCard>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <View style={{ flex: 1, minWidth: 220 }}>
+            <Text style={[type.h3, { color: colors.ink }]}>Custom roles</Text>
+            <Text style={[type.small, { color: colors.muted }]}>
+              Layer extra permissions on top of a built-in role. Built-in roles cannot be edited or deleted.
+            </Text>
+          </View>
+          <ClayButton
+            label="Create role"
+            size="sm"
+            icon="plus"
+            onPress={() => setCustomDraft({ key: '', label: '', description: '', permissions: [] })}
+          />
+        </View>
+        {customRoles.length ? (
+          <View style={{ gap: 8 }}>
+            {customRoles.map((role) => (
+              <View key={role.key} style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: 12, gap: 6 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                  <View style={{ flex: 1, minWidth: 180 }}>
+                    <Text style={[type.smallMedium, { color: colors.ink }]}>{role.label}</Text>
+                    <Text style={[type.tiny, { color: colors.muted }]}>{role.key} · {role.assigned_count} assigned · {role.permissions.length} permissions</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <ClayButton
+                      label="Edit"
+                      size="sm"
+                      variant="outline"
+                      onPress={() => setCustomDraft({
+                        key: role.key,
+                        label: role.label,
+                        description: role.description ?? '',
+                        permissions: role.permissions,
+                      })}
+                    />
+                    <ClayButton label="Delete" size="sm" variant="ghost" onPress={() => setDeleteRole(role)} />
+                  </View>
+                </View>
+                <Text style={[type.small, { color: colors.muted }]} numberOfLines={2}>
+                  {role.permissions.length ? role.permissions.join(' · ') : 'No extra permissions yet.'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={[type.small, { color: colors.muted }]}>
+            No custom roles yet. Create one to tailor access without changing a built-in role.
+          </Text>
+        )}
       </AdminCard>
 
       {loading ? <LoadingCard label="Loading administrators" /> : null}
@@ -222,6 +343,54 @@ export default function AdminRolesScreen() {
         loading={saving}
         onConfirm={() => void applyRole()}
         onCancel={() => setPending(null)}
+      />
+
+      <ModalCard visible={customDraft !== null} onClose={() => setCustomDraft(null)} width={620}>
+        {customDraft ? (
+          <ScrollView style={{ maxHeight: '84%' }} showsVerticalScrollIndicator contentContainerStyle={{ gap: 12 }}>
+            <Text style={[type.h3, { color: colors.ink }]}>Custom role</Text>
+            <Text style={[type.small, { color: colors.muted }]}>
+              Custom permissions are added on top of the built-in role. Built-in roles always remain enforceable.
+            </Text>
+            <ClayInput label="Key" value={customDraft.key} onChangeText={(value) => setCustomDraft({ ...customDraft, key: value })} placeholder="community_helper" autoCapitalize="none" />
+            <ClayInput label="Name" value={customDraft.label} onChangeText={(value) => setCustomDraft({ ...customDraft, label: value })} placeholder="Community helper" />
+            <ClayInput label="Description" value={customDraft.description} onChangeText={(value) => setCustomDraft({ ...customDraft, description: value })} placeholder="What this role is for" />
+            <Text style={[type.tiny, { color: colors.muted }]}>PERMISSIONS</Text>
+            {PERMISSION_GROUPS.map((group) => (
+              <View key={group.module} style={{ gap: 2 }}>
+                <Text style={[type.tiny, { color: colors.accent, letterSpacing: 0.8 }]}>{group.module.toUpperCase()}</Text>
+                {group.permissions.map((permission) => (
+                  <Checkbox
+                    key={permission}
+                    label={PERMISSION_LABELS[permission] ?? permission}
+                    description={permission}
+                    checked={customDraft.permissions.includes(permission)}
+                    onToggle={() =>
+                      setCustomDraft({
+                        ...customDraft,
+                        permissions: customDraft.permissions.includes(permission)
+                          ? customDraft.permissions.filter((item) => item !== permission)
+                          : [...customDraft.permissions, permission],
+                      })
+                    }
+                  />
+                ))}
+              </View>
+            ))}
+            <ClayButton label="Save role" icon="save" loading={customSaving} onPress={() => void saveCustomRole()} />
+          </ScrollView>
+        ) : null}
+      </ModalCard>
+
+      <Dialog
+        visible={deleteRole !== null}
+        title="Delete custom role?"
+        message={deleteRole ? `${deleteRole.label} can only be deleted when no administrator is assigned to it.` : ''}
+        confirmLabel="Delete role"
+        destructive
+        loading={customSaving}
+        onConfirm={() => void removeCustomRole()}
+        onCancel={() => setDeleteRole(null)}
       />
     </AdminPage>
   );

@@ -211,7 +211,7 @@ export default function CommentsScreen() {
                       <Avatar uri={post.author?.avatar_url} name={post.author?.display_name ?? 'Someone'} size={24} />
                       <Text style={[type.smallMedium, { color: colors.ink }]}>{post.author?.display_name ?? 'Someone'}</Text>
                     </View>
-                    <Text numberOfLines={2} style={[type.small, { color: colors.muted, marginTop: 5, lineHeight: 17 }]}>{post.caption || 'A little moment.'}</Text>
+                    <Text numberOfLines={2} style={[type.small, { color: colors.muted, marginTop: 5 }]}>{post.caption || 'A little moment.'}</Text>
                   </View>
                   <Pressable onPress={() => { if (post.author?.username) router.push({ pathname: '/(tabs)/user/[username]', params: { username: post.author.username } }); }} accessibilityLabel="Open author profile">
                     <Feather name="arrow-up-right" size={18} color={colors.muted} />
@@ -243,7 +243,7 @@ export default function CommentsScreen() {
                             <Text style={[type.small, { color: colors.mutedLight, fontSize: 9 }]}>{formatRelativeTime(comment.created_at)}</Text>
                             {comment.pending ? <ActivityIndicator size="small" color={colors.accent} /> : null}
                           </View>
-                          <Text style={[type.small, { color: colors.inkSoft, marginTop: 3, lineHeight: 19 }]}>{comment.body}</Text>
+                          <Text style={[type.small, { color: colors.inkSoft, marginTop: 3 }]}>{comment.body}</Text>
                         </View>
                         {mine ? (
                           <Pressable onPress={() => void remove(comment)} accessibilityLabel="Delete comment" hitSlop={6} style={{ padding: 4 }}>

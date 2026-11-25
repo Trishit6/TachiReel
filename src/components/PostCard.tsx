@@ -121,7 +121,7 @@ export function PostCard({
 
       {post.caption ? (
         <Pressable onPress={() => setExpanded((value) => !value)} style={{ paddingHorizontal: 16, paddingBottom: 13 }}>
-          <Text numberOfLines={expanded ? undefined : 3} style={[type.body, { color: colors.inkSoft, fontSize: 13.5, lineHeight: 21 }]}>
+          <Text numberOfLines={expanded ? undefined : 3} style={[type.body, { color: colors.inkSoft, fontSize: 13.5 }]}>
             {post.caption}
           </Text>
           {post.caption.length > 150 ? (
